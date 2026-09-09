@@ -187,15 +187,44 @@ def _worker_loop() -> None:
             _prune_old_jobs()
 
 
-# 워커 스레드 풀을 앱 로딩 시 한 번만 띄운다 (MAX_CONCURRENT_JOBS개).
-# gunicorn --workers 1 이어야 이 풀이 정확히 하나만 존재한다 (모듈 상단 주석 참고).
-print(f"[module-load] pid={os.getpid()} MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS} "
-      f"워커 스레드 {MAX_CONCURRENT_JOBS}개 생성 시도", file=sys.stderr, flush=True)
-for _i in range(MAX_CONCURRENT_JOBS):
-    _t = threading.Thread(target=_worker_loop, name=f"pem-worker-{_i}", daemon=True)
-    _t.start()
-    print(f"[module-load] pem-worker-{_i} start() 호출 완료, alive={_t.is_alive()}",
-          file=sys.stderr, flush=True)
+# 워커 스레드 풀을 "실제로 요청을 처리하는 프로세스 안에서" 딱 한 번만 띄운다.
+#
+# 중요: 예전엔 이 for-loop를 모듈 로딩 시점(import 시점)에 바로 실행했는데,
+# 로그로 확인해보니 gunicorn은 --preload 없이도 앱을 한 번 "미리 읽어보는"
+# 관리자(arbiter) 프로세스에서 모듈을 import한 뒤, 그 프로세스를 fork()해서
+# 실제로 일하는 워커 프로세스를 만든다. 유닉스에서 fork()는 "그 순간 fork를
+# 호출한 스레드"만 복제하고, 그 외의 배경 스레드는 복제하지 않는다 — 그래서
+# import 시점에 만든 스레드는 관리자 프로세스에만 남고, 실제 서비스하는
+# 워커 프로세스에는 하나도 존재하지 않게 됐다(대기줄이 영원히 안 풀리는 버그의
+# 원인이었음).
+#
+# 그래서 지금은 첫 HTTP 요청이 "실제 워커 프로세스 안에서" 들어오는 그 순간에
+# 딱 한 번만(락으로 중복 방지) 스레드를 만든다. 이 시점은 fork가 끝난 뒤이므로
+# 스레드가 그 프로세스 안에 확실히 살아있게 된다.
+_workers_started = False
+_workers_start_lock = threading.Lock()
+
+
+def _ensure_workers_started() -> None:
+    global _workers_started
+    if _workers_started:
+        return
+    with _workers_start_lock:
+        if _workers_started:
+            return
+        print(f"[module-load] pid={os.getpid()} MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS} "
+              f"워커 스레드 {MAX_CONCURRENT_JOBS}개 생성 시도", file=sys.stderr, flush=True)
+        for _i in range(MAX_CONCURRENT_JOBS):
+            _t = threading.Thread(target=_worker_loop, name=f"pem-worker-{_i}", daemon=True)
+            _t.start()
+            print(f"[module-load] pem-worker-{_i} start() 호출 완료, alive={_t.is_alive()}",
+                  file=sys.stderr, flush=True)
+        _workers_started = True
+
+
+@app.before_request
+def _start_workers_once():
+    _ensure_workers_started()
 
 
 @app.route("/")
