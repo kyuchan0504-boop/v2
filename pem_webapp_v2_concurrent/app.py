@@ -151,8 +151,12 @@ def _prune_old_jobs() -> None:
 
 def _worker_loop() -> None:
     """백그라운드 워커 스레드. 큐에서 job_id를 하나씩 꺼내 계산하고 JOBS에 결과를 채운다."""
+    print(f"[worker-boot] {threading.current_thread().name} 시작됨 (pid={os.getpid()})",
+          file=sys.stderr, flush=True)
     while True:
         job_id = JOB_QUEUE.get()
+        print(f"[worker-pick] {threading.current_thread().name} job={job_id[:8]} 꺼냄",
+              file=sys.stderr, flush=True)
         try:
             with JOBS_LOCK:
                 job = JOBS.get(job_id)
@@ -185,8 +189,13 @@ def _worker_loop() -> None:
 
 # 워커 스레드 풀을 앱 로딩 시 한 번만 띄운다 (MAX_CONCURRENT_JOBS개).
 # gunicorn --workers 1 이어야 이 풀이 정확히 하나만 존재한다 (모듈 상단 주석 참고).
+print(f"[module-load] pid={os.getpid()} MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS} "
+      f"워커 스레드 {MAX_CONCURRENT_JOBS}개 생성 시도", file=sys.stderr, flush=True)
 for _i in range(MAX_CONCURRENT_JOBS):
-    threading.Thread(target=_worker_loop, name=f"pem-worker-{_i}", daemon=True).start()
+    _t = threading.Thread(target=_worker_loop, name=f"pem-worker-{_i}", daemon=True)
+    _t.start()
+    print(f"[module-load] pem-worker-{_i} start() 호출 완료, alive={_t.is_alive()}",
+          file=sys.stderr, flush=True)
 
 
 @app.route("/")
@@ -244,6 +253,10 @@ def api_status(job_id):
 
 
 @app.route("/healthz")
+def healthz():
+    return jsonify({"status": "ok"})
+
+
 @app.route("/api/debug")
 def api_debug():
     """일꾼 스레드가 실제로 살아있는지 눈으로 확인하기 위한 임시 진단용 엔드포인트.
@@ -267,8 +280,6 @@ def api_debug():
         "jobs_in_memory": job_summary,
         "process_id": os.getpid(),
     })
-def healthz():
-    return jsonify({"status": "ok"})
 
 
 if __name__ == "__main__":
