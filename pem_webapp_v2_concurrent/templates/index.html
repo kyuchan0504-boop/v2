@@ -278,6 +278,50 @@ function baseOpts(extra){
   }, extra || {});
 }
 
+const POLL_INTERVAL_MS = 1200;
+const MAX_POLL_ERRORS = 5; // 네트워크 순간 끊김은 봐주고, 이 횟수 넘으면 진짜 오류로 처리
+
+function showError(msg){
+  resultsEl.classList.add('hidden');
+  statusEl.classList.remove('hidden');
+  spinner.classList.add('hidden');
+  statusText.textContent = '오류: ' + msg;
+  runBtn.disabled = false;
+}
+
+async function pollStatus(jobId){
+  let errCount = 0;
+  while(true){
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    let data;
+    try{
+      const res = await fetch(`/api/status/${jobId}`);
+      data = await res.json();
+      if(!res.ok){ throw new Error(data.error || '상태 확인 실패'); }
+      errCount = 0;
+    }catch(err){
+      errCount++;
+      if(errCount > MAX_POLL_ERRORS){ showError(err.message); return; }
+      continue; // 잠깐 네트워크가 끊긴 걸로 보고 계속 재시도
+    }
+
+    if(data.status === 'queued'){
+      statusText.textContent = data.ahead > 0
+        ? `대기 중입니다 (앞에 ${data.ahead}명) — 순서가 되면 바로 계산을 시작해요.`
+        : `대기 중입니다 — 곧 계산이 시작돼요.`;
+    }else if(data.status === 'running'){
+      statusText.textContent = `계산 중입니다 (수십 초 정도 걸려요)...`;
+    }else if(data.status === 'done'){
+      render(data.result);
+      runBtn.disabled = false;
+      return;
+    }else if(data.status === 'error'){
+      showError(data.error || '계산 실패');
+      return;
+    }
+  }
+}
+
 async function runModel(){
   const region = regionSelect.value;
   const kind = currentKind;
@@ -287,20 +331,16 @@ async function runModel(){
   resultsEl.classList.add('hidden');
   statusEl.classList.remove('hidden');
   spinner.classList.remove('hidden');
-  statusText.textContent = `${region} ${kind} 데이터로 계산 중이에요 (수 초 정도 걸려요)...`;
+  statusText.textContent = `${region} ${kind} 계산을 요청 중이에요...`;
 
   try{
     const res = await fetch(`/api/run?region=${encodeURIComponent(region)}&kind=${encodeURIComponent(kind)}`);
     const data = await res.json();
-    if(!res.ok){ throw new Error(data.error || '계산 실패'); }
-    render(data);
+    if(!res.ok){ throw new Error(data.error || '요청 실패'); }
+    statusText.textContent = '대기열에 등록됐어요...';
+    await pollStatus(data.job_id);
   }catch(err){
-    resultsEl.classList.add('hidden');
-    statusEl.classList.remove('hidden');
-    spinner.classList.add('hidden');
-    statusText.textContent = '오류: ' + err.message;
-  }finally{
-    runBtn.disabled = false;
+    showError(err.message);
   }
 }
 
