@@ -244,6 +244,29 @@ def api_status(job_id):
 
 
 @app.route("/healthz")
+@app.route("/api/debug")
+def api_debug():
+    """일꾼 스레드가 실제로 살아있는지 눈으로 확인하기 위한 임시 진단용 엔드포인트.
+    문제가 해결되면 지워도 되지만, 지금은 원인 파악용으로 남겨둔다."""
+    worker_threads = [
+        {"name": t.name, "alive": t.is_alive()}
+        for t in threading.enumerate()
+        if t.name.startswith("pem-worker-")
+    ]
+    with JOBS_LOCK:
+        job_summary = [
+            {"job_id": jid[:8], "status": j["status"], "seq": j["seq"]}
+            for jid, j in JOBS.items()
+        ]
+    return jsonify({
+        "max_concurrent_jobs": MAX_CONCURRENT_JOBS,
+        "worker_threads_expected": MAX_CONCURRENT_JOBS,
+        "worker_threads_found": worker_threads,
+        "all_thread_names": [t.name for t in threading.enumerate()],
+        "queue_size": JOB_QUEUE.qsize(),
+        "jobs_in_memory": job_summary,
+        "process_id": os.getpid(),
+    })
 def healthz():
     return jsonify({"status": "ok"})
 
