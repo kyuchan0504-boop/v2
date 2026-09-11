@@ -39,6 +39,7 @@
     flex:1; min-width:140px; padding:9px 12px; font-size:15px; border-radius:10px;
     border:1px solid var(--border); background:var(--surface); color:var(--text);
   }
+  #yearSelect{flex:0 0 auto; min-width:88px;}
   .wind-note{
     margin-top:10px; padding:9px 11px; font-size:12px; line-height:1.5; color:#8a5a00;
     background:rgba(233,196,106,.22); border:1px solid rgba(233,196,106,.55);
@@ -127,10 +128,11 @@
       <button data-kind="풍력">풍력</button>
     </div>
     <select id="regionSelect"></select>
+    <select id="yearSelect"></select>
   </div>
   <div id="windNote" class="wind-note hidden">
     ⚠️ 풍력은 정상적인 발전 데이터가 있는 5개 지역만 제공하며, <b>2023년</b> 발전 데이터를 기준으로 계산합니다
-    (태양광은 2025년 기준 — 두 에너지원을 비교할 때 연도가 다르다는 점 참고해주세요).
+    (태양광은 직접 고른 연도 기준 — 두 에너지원을 비교할 때 연도가 다를 수 있다는 점 참고해주세요).
   </div>
   <button id="runBtn">확인 — 결과 보기</button>
 </header>
@@ -230,11 +232,14 @@ const CASE_ORDER = ["Case 1","Case 2","Case 3"];
 const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 
 let regionsData = {{ regions | tojson }};
+let solarYears = {{ solar_years | tojson }};
+let solarYearDefault = {{ solar_year_default }};
 let currentKind = "태양광";
 let charts = {};
 
 const kindSeg = document.getElementById('kindSeg');
 const regionSelect = document.getElementById('regionSelect');
+const yearSelect = document.getElementById('yearSelect');
 const runBtn = document.getElementById('runBtn');
 const statusEl = document.getElementById('status');
 const spinner = document.getElementById('spinner');
@@ -252,6 +257,18 @@ function populateRegions(kind){
 }
 populateRegions(currentKind);
 
+function populateYears(){
+  yearSelect.innerHTML = '';
+  solarYears.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '년';
+    if(y === solarYearDefault) opt.selected = true;
+    yearSelect.appendChild(opt);
+  });
+}
+populateYears();
+yearSelect.classList.toggle('hidden', currentKind !== '태양광');
+
 kindSeg.addEventListener('click', (e) => {
   const btn = e.target.closest('button');
   if(!btn) return;
@@ -260,6 +277,7 @@ kindSeg.addEventListener('click', (e) => {
   currentKind = btn.dataset.kind;
   populateRegions(currentKind);
   windNote.classList.toggle('hidden', currentKind !== '풍력');
+  yearSelect.classList.toggle('hidden', currentKind !== '태양광');
 });
 
 function destroyCharts(){
@@ -334,7 +352,11 @@ async function runModel(){
   statusText.textContent = `${region} ${kind} 계산을 요청 중이에요...`;
 
   try{
-    const res = await fetch(`/api/run?region=${encodeURIComponent(region)}&kind=${encodeURIComponent(kind)}`);
+    let url = `/api/run?region=${encodeURIComponent(region)}&kind=${encodeURIComponent(kind)}`;
+    if(kind === '태양광'){
+      url += `&year=${encodeURIComponent(yearSelect.value)}`;
+    }
+    const res = await fetch(url);
     const data = await res.json();
     if(!res.ok){ throw new Error(data.error || '요청 실패'); }
     statusText.textContent = '대기열에 등록됐어요...';
