@@ -54,10 +54,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_ROOT = os.path.join(BASE_DIR, "data", "지역별 태양광, 풍력")
 WORKER_PATH = os.path.join(BASE_DIR, "worker.py")
 
-# 풍력 데이터 품질 점검 결과 (v1과 동일 — README 참고)
+# 풍력 데이터 품질 점검 결과 (v1과 동일 — README 참고). 풍력은 연도 선택 없이
+# 항상 2023년 고정.
 WIND_OK_REGIONS = ["강원", "경남", "경북", "전남", "전북"]
 WIND_YEAR = 2023
-SOLAR_YEAR = 2025
+
+# 태양광은 데이터 파일 자체가 2023~2025년 3개년치를 갖고 있고, 세 해 모두
+# 17개 지역 전부 이용률(CF) 13~15%로 정상 범위임을 확인해서(2026-09 점검)
+# 연도를 선택할 수 있게 열어둔다. 기본값(SOLAR_YEAR_DEFAULT)은 그대로 2025.
+SOLAR_YEARS_AVAILABLE = [2023, 2024, 2025]
+SOLAR_YEAR_DEFAULT = 2025
 
 # 동시에 "실제로 계산 중"일 수 있는 워커 스레드 개수 (Render 무료 플랜 512MB
 # 메모리 보호용). 환경변수 MAX_CONCURRENT_JOBS로 조정 가능 (기본 2). 이 개수를
@@ -113,8 +119,7 @@ def scan_regions() -> dict:
 REGIONS = scan_regions()
 
 
-def run_model_in_subprocess(region: str, kind: str) -> dict:
-    year = WIND_YEAR if kind == "풍력" else SOLAR_YEAR
+def run_model_in_subprocess(region: str, kind: str, year: int) -> dict:
     cmd = [
         sys.executable, WORKER_PATH,
         "--region", region, "--kind", kind,
@@ -164,10 +169,10 @@ def _worker_loop() -> None:
                     continue
                 job["status"] = "running"
                 job["started_at"] = time.time()
-                region, kind = job["region"], job["kind"]
+                region, kind, year = job["region"], job["kind"], job["year"]
 
             try:
-                payload = run_model_in_subprocess(region, kind)
+                payload = run_model_in_subprocess(region, kind, year)
                 with JOBS_LOCK:
                     job["status"] = "done"
                     job["result"] = payload
@@ -229,12 +234,21 @@ def _start_workers_once():
 
 @app.route("/")
 def index():
-    return render_template("index.html", regions=REGIONS)
+    return render_template(
+        "index.html", regions=REGIONS,
+        solar_years=SOLAR_YEARS_AVAILABLE,
+        solar_year_default=SOLAR_YEAR_DEFAULT,
+    )
 
 
 @app.route("/api/regions")
 def api_regions():
-    return jsonify(REGIONS)
+    return jsonify({
+        **REGIONS,
+        "_solar_years": SOLAR_YEARS_AVAILABLE,
+        "_solar_year_default": SOLAR_YEAR_DEFAULT,
+        "_wind_year": WIND_YEAR,
+    })
 
 
 @app.route("/api/run")
@@ -246,12 +260,27 @@ def api_run():
     if region not in REGIONS.get(kind, []):
         return jsonify({"error": f"'{kind}'에 '{region}' 데이터가 없습니다."}), 400
 
+    if kind == "풍력":
+        # 풍력은 연도 선택 없이 항상 고정 (데이터 품질 문제로 5개 지역/2023년만 제공).
+        year = WIND_YEAR
+    else:
+        year_raw = request.args.get("year", "")
+        try:
+            year = int(year_raw) if year_raw else SOLAR_YEAR_DEFAULT
+        except ValueError:
+            return jsonify({"error": f"year 값이 올바르지 않습니다: {year_raw!r}"}), 400
+        if year not in SOLAR_YEARS_AVAILABLE:
+            return jsonify({
+                "error": f"태양광은 {', '.join(map(str, SOLAR_YEARS_AVAILABLE))}년만 지원합니다."
+            }), 400
+
     job_id = uuid.uuid4().hex
     with JOBS_LOCK:
         JOBS[job_id] = {
             "status": "queued",
             "region": region,
             "kind": kind,
+            "year": year,
             "seq": _next_seq(),
             "queued_at": time.time(),
         }
