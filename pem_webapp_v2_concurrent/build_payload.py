@@ -17,7 +17,8 @@ def _monthly_sum(values, months) -> list[float]:
 
 
 LCOH_ITEM_LABELS = {
-    "annualized_capex": "설비비(연환산)",
+    "annualized_capex": "설비비(연환산)",  # 구 모델 키 (호환용으로 남겨둠)
+    "capex": "설비비(현재가치환산)",       # 신모델(2026-09, 열화·교체 반영 lifecycle DCF) 키
     "fixed_OM": "고정 O&M",
     "stack_replacement": "스택 교체",
     "battery_replacement": "배터리 교체",
