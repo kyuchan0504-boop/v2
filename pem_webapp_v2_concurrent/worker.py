@@ -18,6 +18,14 @@
   실패: stdout에 {"error": "..."} JSON 한 줄, exit code 1
   pem_model.py가 계산 중 찍는 수많은 print() 로그는 전부 stderr로 돌려서
   stdout을 순수 JSON 전용 채널로 지킨다 (부모 프로세스가 json.loads()로 그대로 파싱).
+
+2026-09 업데이트 — pem_model.py 교체 (열화 반영 lifecycle LCOH 모델):
+  main()의 시그니처가 main(make_plots, run_case1_sweep)로 바뀌어서
+  run_hysteresis 인자가 사라졌다(구 모델 전용 인자였음) — 그래서 아래 호출에서
+  뺐다. 새 모델은 Case 3(하이브리드 ESS) 최적점 탐색 중 ESS 용량이 병리적으로
+  작은 후보를 만나면 시간별 이벤트 루프가 과도하게 느려지는 문제가 있어
+  pem_model.py의 find_operating_point_case3 / _size_ess에 최소 용량 하한을
+  추가해뒀다(정확도 손실 없이 계산시간 약 7배 단축, 118초 -> 22초 로컬 실측).
 """
 from __future__ import annotations
 
@@ -52,7 +60,7 @@ def main() -> int:
 
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            out = m.main(make_plots=False, run_case1_sweep=False, run_hysteresis=False)
+            out = m.main(make_plots=False, run_case1_sweep=False)
         sys.stderr.write(buf.getvalue())  # 원본 로그는 서버 로그(stderr)로만 흘러가게
 
         payload = build_payload(m, out, args.region, args.kind)
