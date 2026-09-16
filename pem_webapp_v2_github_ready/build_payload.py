@@ -45,6 +45,11 @@ def build_payload(m, out: dict, region: str, kind: str) -> dict:
     lcohs = out["lcohs"]
     stack = out["stack"]
 
+    p_nameplate_kw = float(stack.P_nameplate)
+    # 전해조가 정격(j_rated)으로 100% 돌 때의 수소 생산 속도 [kg/h] — 사이트에서
+    # "PEM 정격 용량"을 ESS 용량(kWh)과 나란히 보여주기 위한 참고값.
+    h2_rate_kg_h = float(m.h2_area(stack.j_rated)) * stack.A_tot
+
     cases = {}
     for name, r in results.items():
         lc = lcohs[name]
@@ -55,6 +60,10 @@ def build_payload(m, out: dict, region: str, kind: str) -> dict:
         n_yr = max(m._annual_n(r), 1e-12)
         hrs = m._production_hours(r, getattr(r, "dt", 1.0) or 1.0)
         h2_timestamps = r.timestamps if r.timestamps is not None else profile.timestamps
+        # ESS 용량(kWh) 숫자만 보면 크기 감이 안 오니, "이 ESS가 PEM 전해조를
+        # 정격 출력으로 단독으로 몇 시간 돌릴 수 있는 크기인지"를 같이 준다
+        # (교수님 피드백: PEM 용량과 ESS 용량을 나란히 비교할 수 있게 해달라는 요청).
+        ess_hours_of_stack = round(r.E_rated / p_nameplate_kw, 2) if p_nameplate_kw > 0 else 0.0
         cases[name] = {
             "annual_h2_t": round(m._annual_mean(r, r.H2_total) / 1000.0, 3),
             "lcoh": round(float(lc["LCOH"]), 3),
@@ -62,6 +71,7 @@ def build_payload(m, out: dict, region: str, kind: str) -> dict:
             "op_hours": round(m._annual_mean(r, r.op_hours), 0),
             "curtail_pct": round(r.E_curtail / e_paid * 100, 2),
             "ess_kwh": round(r.E_rated, 1),
+            "ess_hours_of_stack": ess_hours_of_stack,
             "ess_capex_usd": round(float(lc["capex_ess"]), 0),
             "lcoh_items": items,
             "ledger_pct": {
@@ -103,6 +113,8 @@ def build_payload(m, out: dict, region: str, kind: str) -> dict:
             "j_rated": stack.j_rated,
             "capex_stack_usd": round(stack.capex_stack, 0),
             "capex_bop_usd": round(stack.capex_bop, 0),
+            "p_nameplate_kw": round(p_nameplate_kw, 1),
+            "h2_rate_kg_h": round(h2_rate_kg_h, 2),
         },
         "cases": cases,
         "best_lcoh_case": best_lcoh[0],
