@@ -29,11 +29,22 @@ app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = BASE_DIR / "results_cache"
-MANIFEST_PATH = CACHE_DIR / "manifest.json"
+BUNDLE_PATH = CACHE_DIR / "bundle.json"
+MANIFEST_PATH = CACHE_DIR / "manifest.json"  # 이제 안 씀 — 참고용으로만 남겨둠
 
 
 def _load_cache() -> tuple[dict[tuple[str, str], dict], dict[str, list[str]], dict]:
-    """results_cache/manifest.json + 각 결과 JSON을 메모리로 올린다.
+    """results_cache/bundle.json 하나를 메모리로 올린다.
+
+    2026-09-16 변경: 예전엔 지역마다 "풍력_강원.json"처럼 한글이 들어간
+    파일명으로 27개를 따로 저장했는데, 이 구조가 GitHub 업로드 과정에서
+    한글 파일명 27개가 통째로 커밋에서 빠지는 문제를 냈다(manifest.json만
+    올라가고 실제 결과 파일들은 하나도 안 올라감 — 파일시스템/깃 계층에서
+    비-ASCII 파일명이 또 말썽을 부린 것). 파일명 자체에는 아예 한글을 쓰지
+    않도록, 27개 결과를 bundle.json 파일 하나(영문 이름)에 다 합쳐서 저장하고
+    지역/발전원 이름은 그 안의 JSON 값(키)으로만 넣는 방식으로 바꿨다 — 이러면
+    한글은 파일 "내용"에만 있고 파일 "이름"에는 전혀 없어서 이런 종류의 문제가
+    재발할 수 없다.
 
     반환: (results, regions, year_info)
       results: {(kind, region): payload}
@@ -45,18 +56,19 @@ def _load_cache() -> tuple[dict[tuple[str, str], dict], dict[str, list[str]], di
     regions: dict[str, list[str]] = {"태양광": [], "풍력": []}
     year_info: dict[str, dict[str, dict]] = {"태양광": {}, "풍력": {}}
 
-    if not MANIFEST_PATH.exists():
-        print(f"[경고] {MANIFEST_PATH} 없음 — precompute.py를 먼저 돌려야 합니다.")
+    if not BUNDLE_PATH.exists():
+        print(f"[경고] {BUNDLE_PATH} 없음 — precompute.py를 먼저 돌려야 합니다.")
         return results, regions, year_info
 
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    for entry in manifest.get("entries", []):
+    bundle = json.loads(BUNDLE_PATH.read_text(encoding="utf-8"))
+    bundle_results = bundle.get("results", {})
+    for entry in bundle.get("entries", []):
         region, kind = entry["region"], entry["kind"]
-        cpath = CACHE_DIR / f"{kind}_{region}.json"
-        if not cpath.exists():
-            print(f"[경고] manifest엔 있는데 파일이 없음: {cpath}")
+        key = f"{kind}|{region}"
+        payload = bundle_results.get(key)
+        if payload is None:
+            print(f"[경고] entries엔 있는데 results엔 없음: {key}")
             continue
-        payload = json.loads(cpath.read_text(encoding="utf-8"))
         results[(kind, region)] = payload
         regions.setdefault(kind, []).append(region)
         year_info.setdefault(kind, {})[region] = {

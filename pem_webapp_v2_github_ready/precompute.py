@@ -41,6 +41,7 @@ BASE_DIR = Path(__file__).resolve().parent
 WORKER_PATH = BASE_DIR / "worker.py"
 CACHE_DIR = BASE_DIR / "results_cache"
 MANIFEST_PATH = CACHE_DIR / "manifest.json"
+BUNDLE_PATH = CACHE_DIR / "bundle.json"
 
 SOLAR_REGIONS = ["강원", "경기", "경남", "경북", "광주", "대구", "대전", "부산",
                  "서울", "세종", "울산", "인천", "전남", "전북", "제주", "충남", "충북"]
@@ -133,6 +134,25 @@ def main() -> int:
             "excluded": [{"region": r, "kind": "풍력", "reason": "이용률 0%에 가까워 제외"}
                          for r in WIND_EXCLUDED],
         }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # bundle.json: 실제로 배포/커밋되는 건 이 파일 하나뿐이다. 예전엔
+        # "풍력_강원.json"처럼 지역마다 한글 파일명으로 따로 저장했는데, 그
+        # 방식이 GitHub 업로드 과정에서 한글 파일명 27개가 통째로 커밋에서
+        # 빠지는 사고를 냈다(manifest.json만 올라가고 실제 결과는 하나도
+        # 안 올라감). 파일 "이름"에는 한글을 아예 안 쓰도록, 지역/발전원별
+        # 결과를 이 파일 하나(영문 이름)의 JSON 값(키)으로만 합쳐서 저장한다
+        # — 한글은 파일 내용에만 있으니 이런 문제가 재발할 수 없다.
+        bundle_results = {}
+        for e in entries:
+            cpath = cache_path(e["kind"], e["region"])
+            if cpath.exists():
+                bundle_results[f"{e['kind']}|{e['region']}"] = json.loads(
+                    cpath.read_text(encoding="utf-8"))
+        BUNDLE_PATH.write_text(json.dumps({
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "entries": entries,
+            "results": bundle_results,
+        }, ensure_ascii=True), encoding="utf-8")
 
     manifest_entries = []
     failed = []
