@@ -372,6 +372,7 @@ let regionsData = {{ regions | tojson }};
 let yearInfo = {{ year_info | tojson }};
 let currentKind = "태양광";
 let charts = {};
+let hasRun = false; // 한 번이라도 "확인"으로 결과를 본 뒤부터는, Case/지역을 바꾸면 자동으로 다시 불러온다
 
 const kindSeg = document.getElementById('kindSeg');
 const regionSelect = document.getElementById('regionSelect');
@@ -382,13 +383,19 @@ const statusText = document.getElementById('statusText');
 const resultsEl = document.getElementById('results');
 const dataNote = document.getElementById('dataNote');
 
-function populateRegions(kind){
+function populateRegions(kind, preferredRegion){
   regionSelect.innerHTML = '';
-  (regionsData[kind] || []).forEach(r => {
+  const list = regionsData[kind] || [];
+  list.forEach(r => {
     const opt = document.createElement('option');
     opt.value = r; opt.textContent = r;
     regionSelect.appendChild(opt);
   });
+  // 태양광<->풍력을 왔다갔다 눌러도 고르고 있던 지역을 최대한 유지한다.
+  // 그 지역이 새 에너지원 목록에 없을 때만(예: 풍력엔 없는 지역) 첫 항목으로.
+  if(preferredRegion && list.includes(preferredRegion)){
+    regionSelect.value = preferredRegion;
+  }
 }
 populateRegions(currentKind);
 
@@ -407,13 +414,18 @@ function updateDataNote(){
 kindSeg.addEventListener('click', (e) => {
   const btn = e.target.closest('button');
   if(!btn) return;
+  const prevRegion = regionSelect.value;
   [...kindSeg.children].forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentKind = btn.dataset.kind;
-  populateRegions(currentKind);
+  populateRegions(currentKind, prevRegion);
   updateDataNote();
+  if(hasRun) runModel(); // 이미 결과를 본 상태면, 바꾸자마자 바로 그 결과로 갱신
 });
-regionSelect.addEventListener('change', updateDataNote);
+regionSelect.addEventListener('change', () => {
+  updateDataNote();
+  if(hasRun) runModel();
+});
 updateDataNote();
 
 function destroyCharts(){
@@ -459,6 +471,7 @@ async function runModel(){
     const data = await res.json();
     if(!res.ok){ throw new Error(data.error || '요청 실패'); }
     render(data);
+    hasRun = true;
   }catch(err){
     showError(err.message);
     return;
