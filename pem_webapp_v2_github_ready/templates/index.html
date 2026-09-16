@@ -254,7 +254,7 @@ function updateDataNote(){
   const kind = currentKind, region = regionSelect.value;
   const info = (yearInfo[kind] || {})[region];
   if(!info){ dataNote.classList.add('hidden'); return; }
-  let text = `📊 ${region} ${kind}: <b>${info.start}~${info.end}년</b>(${info.n_years}개년) 실측 발전 데이터 기준으로 미리 계산해둔 결과예요.`;
+  let text = `📊 ${region} ${kind}: <b>${info.start}~${info.end}년</b>(${info.n_years}개년) 실측 발전 데이터 기준으로 계산한 결과입니다.`;
   if(kind === '풍력'){
     text += ' (이용률이 너무 낮은 지역·연도는 데이터 품질 문제로 제외했어요.)';
   }
