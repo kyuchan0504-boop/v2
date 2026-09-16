@@ -383,12 +383,21 @@ const statusText = document.getElementById('statusText');
 const resultsEl = document.getElementById('results');
 const dataNote = document.getElementById('dataNote');
 
+function regionLabel(r){
+  // 드롭다운만 보고도 이 지역에 태양광/풍력 중 뭐가 있는지 바로 알 수 있게,
+  // "강원(태양광, 풍력)" / "부산(태양광)"처럼 선택지 자체에 표시해준다.
+  const kinds = [];
+  if((regionsData['태양광'] || []).includes(r)) kinds.push('태양광');
+  if((regionsData['풍력'] || []).includes(r)) kinds.push('풍력');
+  return `${r}(${kinds.join(', ')})`;
+}
+
 function populateRegions(kind, preferredRegion){
   regionSelect.innerHTML = '';
   const list = regionsData[kind] || [];
   list.forEach(r => {
     const opt = document.createElement('option');
-    opt.value = r; opt.textContent = r;
+    opt.value = r; opt.textContent = regionLabel(r);
     regionSelect.appendChild(opt);
   });
   // 태양광<->풍력을 왔다갔다 눌러도 고르고 있던 지역을 최대한 유지한다.
