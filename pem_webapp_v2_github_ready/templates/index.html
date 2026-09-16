@@ -399,6 +399,24 @@ function populateRegions(kind, preferredRegion){
 }
 populateRegions(currentKind);
 
+const windBtn = kindSeg.querySelector('button[data-kind="풍력"]');
+
+function updateKindAvailability(){
+  // 태양광 화면에서 지금 고른 지역이 풍력 데이터가 없는 지역(광주·대구·대전·부산·
+  // 서울·세종·충북)이면, 풍력 탭 자체를 눌러서 강원 등으로 조용히 바뀌어버리지
+  // 않도록 미리 비활성화해서 "풍력(준비중)"으로 보여준다. 풍력 화면에 있을 땐
+  // 지역 선택지 자체가 이미 풍력 지역만 나오니 항상 눌러도 된다.
+  const region = regionSelect.value;
+  const availableInWind = (regionsData['풍력'] || []).includes(region);
+  if(currentKind === '태양광'){
+    windBtn.disabled = !availableInWind;
+    windBtn.textContent = availableInWind ? '풍력' : '풍력 (준비중)';
+  } else {
+    windBtn.disabled = false;
+    windBtn.textContent = '풍력';
+  }
+}
+
 function updateDataNote(){
   const kind = currentKind, region = regionSelect.value;
   const info = (yearInfo[kind] || {})[region];
@@ -413,19 +431,22 @@ function updateDataNote(){
 
 kindSeg.addEventListener('click', (e) => {
   const btn = e.target.closest('button');
-  if(!btn) return;
+  if(!btn || btn.disabled) return;
   const prevRegion = regionSelect.value;
   [...kindSeg.children].forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentKind = btn.dataset.kind;
   populateRegions(currentKind, prevRegion);
+  updateKindAvailability();
   updateDataNote();
   if(hasRun) runModel(); // 이미 결과를 본 상태면, 바꾸자마자 바로 그 결과로 갱신
 });
 regionSelect.addEventListener('change', () => {
+  updateKindAvailability();
   updateDataNote();
   if(hasRun) runModel();
 });
+updateKindAvailability();
 updateDataNote();
 
 function destroyCharts(){
