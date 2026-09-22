@@ -36,6 +36,17 @@
   요청마다 부르지 않고, precompute.py가 만들어둔 results_cache/*.json을 그냥
   읽어서 즉시 응답한다). 그래서 엑셀 요약 저장(SAVE_FINAL_SUMMARY_XLSX)과 CSV
   저장(SAVE_RESULT_CSV)은 꺼서 필요없는 부수 파일이 생기지 않게 한다.
+
+2026-09-18 업데이트 #3 — 0918 모델(촉매 선택 기능) 대응:
+  ① 새 pem_model.py는 main()이 끝날 때 무조건 RESULT_CACHE_DIR에 타임스탬프
+     폴더 + results.pkl.gz를 저장하는데, 그 기본 폴더 이름이 하필 우리
+     웹앱의 실제 서비스 캐시 폴더와 똑같이 "results_cache"라서 그냥 두면
+     precompute를 돌릴 때마다 배포 폴더 안에 대용량 pickle이 쌓인다.
+     그래서 RESULT_CACHE_DIR을 매 프로세스마다 격리된 임시 폴더로 돌린다.
+  ② main()에 catalyst_name 인자가 새로 생겨서, --catalyst로 받은 촉매
+     이름(IrO2/MnO2/NMO-0.05~0.4)을 그대로 넘긴다.
+  ③ calculate_sweeps(민감도 그래프용 j-sweep, 기본 True)는 우리 JSON
+     결과에 안 쓰이는 값이라 꺼서 계산 시간을 아낀다.
 """
 from __future__ import annotations
 
@@ -44,6 +55,8 @@ import contextlib
 import io
 import json
 import sys
+import tempfile
+from pathlib import Path
 
 
 def main() -> int:
@@ -53,6 +66,8 @@ def main() -> int:
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--start-year", type=int, required=True)
     parser.add_argument("--end-year", type=int, required=True)
+    parser.add_argument("--catalyst", default="IrO2",
+                        help="IrO2 | MnO2 | NMO-0.05 | NMO-0.1 | NMO-0.2 | NMO-0.3 | NMO-0.4")
     args = parser.parse_args()
 
     try:
@@ -69,10 +84,14 @@ def main() -> int:
         m.FAST_MODE = True
         m.SAVE_FINAL_SUMMARY_XLSX = False
         m.SAVE_RESULT_CSV = False
+        # ① results_cache 이름 충돌 방지 — 각 워커 프로세스마다 독립된 임시
+        # 폴더에 pickle 결과를 버리게 한다(우리 배포 results_cache/와 절대 안 겹침).
+        m.RESULT_CACHE_DIR = str(Path(tempfile.gettempdir()) / "pemwe_worker_scratch")
 
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            out = m.main(make_plots=False, run_case1_sweep=False)
+            out = m.main(make_plots=False, run_case1_sweep=False,
+                        catalyst_name=args.catalyst, calculate_sweeps=False)
         sys.stderr.write(buf.getvalue())  # 원본 로그는 서버 로그(stderr)로만 흘러가게
 
         payload = build_payload(m, out, args.region, args.kind)

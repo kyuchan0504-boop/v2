@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+import copy
 import math
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -25,10 +26,29 @@ except Exception:
 ########################################################################################
 
 FIG_DIR: str | None = "figures"      # None이면 저장 안 함
-FIG_DPI = 130
+FIG_DPI = 300
 SHOW_FIGURES = True
+FIG_FORMATS = ("png", "svg")   # PNG 해상도/출력 형식을 바꿔도 PART 14 재계산 불필요
+
+# ── 실행 분리: 터미널 전체 실행의 기본값은 계산·저장만 수행 ─────────────────
+RUN_MODE = "calculate"         # "calculate" | "plot" | "all"
+RESULT_CACHE_DIR = "results_cache"
+DAILY_PLOT_DATE = "2025-09-16"
+DAILY_FIGSIZE = (10.0, 5.0)
+DAILY_INCLUDE_GENERATION = True
+CALCULATE_J_SWEEPS = True      # 기존 G18~G20 민감도는 PART 14에서 미리 계산
+RUN_CASE1_RATING_SWEEP = True
+_FIGURE_RUN_OVERRIDE = None    # PART 15에서 저장 결과의 run 폴더로 설정
 
 FAST_MODE = True
+
+# ── 촉매 선정 패널 (PART 3의 내장 파라미터를 사용) ──────────────────────────
+# 선택: "IrO2", "MnO2", "NMO-0.05", "NMO-0.1", "NMO-0.2", "NMO-0.3", "NMO-0.4"
+CATALYST_NAME = "IrO2"
+CATALYST_PARAM_FILE: str | None = None   # None: 내장값만 사용, 별도 CSV 불필요
+TAFEL_N_ELECTRON = 2.0                  # alpha 규약 확인용; 전압 계산에는 b, j0 사용
+TAFEL_T_REF_K = 353.15                  # alpha 규약 확인용 기준 온도 [K]
+EXTRAPOLATION_WARN_DECADES = 1.0
 
 # ── 운전 조건 ─────────────────────────────────────────────────────────────
 
@@ -64,8 +84,6 @@ J_STAR_FIXED_CASE3: float | None = None     # None이면 J_STAR_FIXED 사용
 
 RE_SOURCE = "region"
 
-# 스크립트와 같은 폴더에 "지역별 발전소 데이터" 폴더를 두면 됩니다.
-# 다른 위치에 보관한다면 RE_DATA_ROOT만 실제 절대경로로 변경하세요.
 PROJECT_DIR = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
 RE_DATA_ROOT = str(PROJECT_DIR / "지역별 발전소 데이터" / "1MW 정규화"
                    / "지역별 태양광, 풍력")
@@ -89,12 +107,10 @@ RE_END_YEAR: int | None = None            # 종료연도 (포함); None -> 발�
 RE_MISSING_POLICY = "error"              # 결측은 기존처럼 오류. 실제 숫자 0과 구분합니다.
 RE_MIN_ANNUAL_CF = 0.01                  # 기존의 연간 이용률 1% 점검 기준 유지
 RE_LOW_CF_POLICY = "warn"                # "warn": 경고 후 원값 사용 | "error": 기존처럼 중단
-# 부산 풍력 2021~2022년은 업로드 파일의 발전량 자체가 모두 0입니다.
 
 RE_FILE_VALUE_UNIT = "kW"                # RE_SOURCE="file" 전용: "kW" | "kWh"
 SAVE_RESULT_CSV = True
 
-# 최종 요약 Excel 저장: FIG_DIR / SAVE_RESULT_CSV / 그래프 생성 여부와 독립적입니다.
 SAVE_FINAL_SUMMARY_XLSX = True
 FINAL_SUMMARY_DIR: str | Path = "results_excel"  
 
@@ -211,9 +227,13 @@ _FIGURE_MANIFEST = []
 def _ensure_fig_dir():
     if FIG_DIR is None:
         return None
+    if _FIGURE_RUN_OVERRIDE is not None:
+        d = Path(_FIGURE_RUN_OVERRIDE)
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d)
     d = _resolve_path(FIG_DIR)
-    if _OUTPUT_RUN_TAG:
-        d = d / _OUTPUT_RUN_TAG
+    cat_tag = _summary_filename_part(get_catalyst().name, "catalyst")
+    d = d / (f"{_OUTPUT_RUN_TAG}_{cat_tag}" if _OUTPUT_RUN_TAG else cat_tag)
     d.mkdir(parents=True, exist_ok=True)
     return str(d)
 
@@ -275,6 +295,8 @@ WATER_STOICH = MW_H2O / MW_H2    # 화학량론 물 소요 [kg/kg-H2]
 HHV_H2_KWH_KG = 39.39            # 수소 고위발열량 [kWh/kg] (141.8 MJ/kg)
 
 METAL_PRICE = {
+    "Mn": 0.0020 * EUR_TO_USD,
+    "Nd": 0.101,                       # donor의 Nd2O3 가격 표기/수치 유지
     "Pt": 33487.0 / 1000.0,
     "Au": 49.000 * EUR_TO_USD,
     "Ir": 122906.0/1000.0,
@@ -331,15 +353,38 @@ def _mass_material_g(area_cm2: float, thickness_um: float, density_gcm3: float) 
 
 
 # %%
-# PART 3 — 촉매 : 고정 Tafel 파라미터
+# PART 3 — 촉매 선택 · 내장 NMO/IrO2 Tafel 파라미터
 ########################################################################################
 ########################################################################################
 
 @dataclass(frozen=True)
-class IrO2Params:
-    slope_mV_dec: float = 50.0    # Tafel 기울기 [mV/dec]
-    j0_Acm2: float = 1.0e-6      # 교환전류밀도 [A/cm2]
-    an_load_mgcm2: float = 1.0   # Ir 질량 기준 로딩 [mg/cm2]
+class CatalystParams:
+    name: str
+    slope_mV_dec: float                     # b [mV/decade]; j0와 함께 Tafel 식에 사용
+    j0_Acm2: float                          # 교환전류밀도 [A/cm2]
+    alpha: float | None = None              # 검증용 (계산 미사용)
+    R2: float | None = None
+    n_fit: int | None = None
+    fit_window_Acm2: tuple = (np.nan, np.nan)
+    NdMn_atomic: float = 0.0                # 양극 blend 단가 산정용 (ICP Nd/Mn 원자비)
+    metal_mass_frac: dict | None = None
+    an_load_mgcm2: float = 8.0
+    source: str = ""
+
+    def __post_init__(self):
+        for key in ("slope_mV_dec", "j0_Acm2", "an_load_mgcm2"):
+            value = float(getattr(self, key))
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError(f"{self.name}: {key}는 유한한 양수여야 합니다")
+        if not np.isfinite(self.NdMn_atomic) or self.NdMn_atomic < 0:
+            raise ValueError(f"{self.name}: NdMn_atomic은 유한한 비음수여야 합니다")
+        if self.metal_mass_frac:
+            if any(m not in METAL_PRICE or not np.isfinite(w) or w < 0
+                   for m, w in self.metal_mass_frac.items()):
+                raise ValueError(f"{self.name}: 금속 종류/질량분율을 확인하세요")
+        lo, hi = self.fit_window_Acm2
+        if not (np.isnan(lo) and np.isnan(hi)) and not (0 < lo < hi and np.isfinite(hi)):
+            raise ValueError(f"{self.name}: fitting 구간은 0 < lower < upper여야 합니다")
 
     @property
     def b_V_dec(self) -> float:
@@ -349,8 +394,202 @@ class IrO2Params:
         j = np.clip(np.atleast_1d(np.asarray(j_Acm2, dtype=float)), 1e-30, None)
         return self.b_V_dec * np.log10(j / self.j0_Acm2)
 
-IRO2 = IrO2Params()
+    def eta_fn(self):
+        b, j0 = self.b_V_dec, self.j0_Acm2
 
+        def _fn(j_Acm2):
+            j = np.clip(np.atleast_1d(np.asarray(j_Acm2, dtype=float)), 1e-30, None)
+            return b * np.log10(j / j0)
+        return _fn
+
+    def alpha_implied(self) -> float:
+        return 2.303 * R_CONST * TAFEL_T_REF_K / (TAFEL_N_ELECTRON * F_CONST * self.b_V_dec)
+
+    def convention_error(self) -> float | None:
+        if self.alpha is None:
+            return None
+        return abs(self.alpha_implied() - self.alpha) / self.alpha
+
+    def anode_price_usd_g(self) -> float:
+        if self.metal_mass_frac:
+            return sum(w * METAL_PRICE[m] for m, w in self.metal_mass_frac.items())
+        MW_Mn, MW_Nd = 54.938, 144.242
+        m_Nd_rel = self.NdMn_atomic * MW_Nd
+        w_Nd = m_Nd_rel / (MW_Mn + m_Nd_rel)
+        return (1.0 - w_Nd) * METAL_PRICE["Mn"] + w_Nd * METAL_PRICE["Nd"]
+
+    def extrapolation_decades(self, j_op_max: float) -> float:      # 외삽 확인용
+        hi = self.fit_window_Acm2[1]
+        if not np.isfinite(hi) or hi <= 0:
+            return float("nan")
+        return math.log10(max(j_op_max, 1e-30) / hi)
+
+    def signature(self) -> tuple:                                   # 검산용
+        return (self.name, self.slope_mV_dec, self.j0_Acm2)
+
+_FIT_WIN = (3.162e-3, 3.162e-2)
+_NDMN = {"MnO2": 0.0, "NMO-0.05": 0.0267, "NMO-0.1": 0.0651,
+         "NMO-0.2": 0.1465, "NMO-0.3": 0.2610, "NMO-0.4": 0.3755}
+
+PARAM_TABLE: dict[str, dict] = {
+    "MnO2":     dict(slope_mV_dec=94.56, alpha=0.3706, j0_Acm2=9.70817771504645e-07,
+                     R2=0.99943, n_fit=31),
+    "NMO-0.05": dict(slope_mV_dec=89.30, alpha=0.3924, j0_Acm2=1.6808979002399986e-06,
+                     R2=0.99976, n_fit=30),
+    "NMO-0.1":  dict(slope_mV_dec=84.84, alpha=0.4131, j0_Acm2=1.6398759258616468e-06,
+                     R2=0.99982, n_fit=28),
+    "NMO-0.2":  dict(slope_mV_dec=88.28, alpha=0.3969, j0_Acm2=3.310545552558983e-06,
+                     R2=0.99973, n_fit=29),
+    "NMO-0.3":  dict(slope_mV_dec=90.18, alpha=0.3886, j0_Acm2=3.7277310173498353e-06,
+                     R2=0.99966, n_fit=30),
+    "NMO-0.4":  dict(slope_mV_dec=89.10, alpha=0.3933, j0_Acm2=3.843397535469364e-06,
+                     R2=0.99971, n_fit=30),
+}
+for _k, _v in PARAM_TABLE.items():
+    _v.update(fit_window_Acm2=_FIT_WIN, NdMn_atomic=_NDMN.get(_k, 0.0),
+              an_load_mgcm2=8.0, source="NMO_tafel_parameters.csv (내장)")
+
+PARAM_TABLE["IrO2"] = dict(
+    slope_mV_dec = 50.0,            # ← 확보한 b [mV/dec]
+    j0_Acm2      = 1.0e-6,          # ← 확보한 j0 [A/cm2, geometric]
+    alpha        = None,            # 규약 다르면 검증 끄기
+    R2 = None, n_fit = None,
+    fit_window_Acm2 = (1e-3, 1e-1), # ← 실제 측정 구간. 외삽 경고의 근거
+    NdMn_atomic  = 0.0,
+    an_load_mgcm2 = 1.0,            # ★ Ir 기준 1~2 (상용 PEM)
+    metal_mass_frac = {"Ir": 1.0},  # 로딩이 IrO2 질량 기준이면 0.8573
+    source = "○○ et al. (연도), 0.5 M H2SO4, 25 C",
+    )
+
+_TABLE_CACHE: dict | None = None
+_TABLE_CACHE_FILE: str | None = None
+
+
+def reload_catalyst_parameters() -> None:
+    global _TABLE_CACHE, _TABLE_CACHE_FILE
+    _TABLE_CACHE = _TABLE_CACHE_FILE = None
+    _INVERTER_CACHE.clear()
+
+
+def _param_table() -> dict:
+    global _TABLE_CACHE, _TABLE_CACHE_FILE
+    if CATALYST_PARAM_FILE is None:
+        return PARAM_TABLE
+    path = _resolve_path(CATALYST_PARAM_FILE).resolve()
+    if _TABLE_CACHE is not None and _TABLE_CACHE_FILE == str(path):
+        return _TABLE_CACHE
+    if not path.is_file():
+        raise FileNotFoundError(f"촉매 CSV 없음: {path}. 내장값만 쓰려면 CATALYST_PARAM_FILE = None")
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    required = {"catalyst", "slope_mV_dec", "j0_Acm2"}
+    if not required.issubset(df.columns):
+        raise ValueError(f"촉매 CSV 필수 컬럼: {sorted(required)}")
+    if df.empty or df.catalyst.isna().any():
+        raise ValueError("촉매 CSV가 비어 있거나 catalyst 이름에 결측이 있습니다")
+    names = df.catalyst.astype(str).str.strip()
+    if (names == "").any() or names.duplicated().any():
+        raise ValueError("촉매 CSV의 이름은 비어 있지 않고 중복이 없어야 합니다")
+    table = {k: dict(v) for k, v in PARAM_TABLE.items()}
+    for nm, (_, row) in zip(names, df.iterrows()):
+        if nm not in table:
+            raise KeyError(f"{nm!r}: 원가 조성을 포함해 PARAM_TABLE에 먼저 등록하세요")
+        params = dict(table[nm])
+        for key in ("slope_mV_dec", "j0_Acm2", "alpha", "R2", "NdMn_atomic", "an_load_mgcm2"):
+            if key in row and not pd.isna(row[key]):
+                params[key] = float(row[key])
+        if pd.isna(row["slope_mV_dec"]) or pd.isna(row["j0_Acm2"]):
+            raise ValueError(f"{nm}: b와 j0에는 결측을 사용할 수 없습니다")
+        if "n_fit" in row and not pd.isna(row["n_fit"]):
+            params["n_fit"] = int(row["n_fit"])
+        w = row.get("fit_window_log10j")
+        if isinstance(w, str) and w.strip():
+            lo, hi = [float(x) for x in w.strip('() \"').split(",")]
+            params["fit_window_Acm2"] = (10.0 ** lo / 1000.0, 10.0 ** hi / 1000.0)
+        lower, upper = row.get("fit_min_Acm2"), row.get("fit_max_Acm2")
+        if lower is not None and upper is not None and not pd.isna(lower) and not pd.isna(upper):
+            params["fit_window_Acm2"] = (float(lower), float(upper))
+        params["source"] = str(path)
+        CatalystParams(name=nm, **params)  
+        table[nm] = params
+    _TABLE_CACHE, _TABLE_CACHE_FILE = table, str(path)
+    print(f"[catalyst] 파라미터 CSV 반영: {path}")
+    return table
+
+
+def get_catalyst() -> CatalystParams:
+    table = _param_table()
+    if CATALYST_NAME not in table:
+        raise KeyError(f"촉매 {CATALYST_NAME!r} 없음. 선택 가능: {', '.join(table)}")
+    params = dict(table[CATALYST_NAME])
+    if params.get("metal_mass_frac") is not None:
+        params["metal_mass_frac"] = dict(params["metal_mass_frac"])
+    return CatalystParams(name=CATALYST_NAME, **params)
+
+
+def set_catalyst(name: str) -> CatalystParams:
+    global CATALYST_NAME
+    name = str(name).strip()
+    table = _param_table()
+    if name not in table:
+        raise KeyError(f"촉매 {name!r} 없음. 선택 가능: {', '.join(table)}")
+    CatalystParams(name=name, **table[name])
+    CATALYST_NAME = name
+    _INVERTER_CACHE.clear()
+    return get_catalyst()
+
+
+def catalyst_metadata(cat: CatalystParams | None = None) -> dict:
+    cat = get_catalyst() if cat is None else cat
+    data = asdict(cat)
+    data["anode_price_usd_g"] = cat.anode_price_usd_g()
+    data["catalyst_cost_factor"] = 1.3
+    return data
+
+
+def _require_active_catalyst(snapshot: dict, label: str) -> None:
+    current = catalyst_metadata()
+    keys = ("name", "slope_mV_dec", "j0_Acm2", "an_load_mgcm2", "anode_price_usd_g")
+    if any(snapshot.get(k) != current[k] for k in keys):
+        raise ValueError(f"{label}: 생성 당시 촉매({snapshot.get('name')})와 현재 촉매"
+                         f"({current['name']}) 또는 파라미터가 다릅니다. "
+                         "해당 촉매로 main()을 다시 실행해 스택과 운전 결과를 새로 계산하세요.")
+
+
+def catalyst_parameter_table() -> pd.DataFrame:
+    rows = []
+    for name, params in _param_table().items():
+        cp = CatalystParams(name=name, **params)
+        rows.append(dict(catalyst=name, selected=name == CATALYST_NAME,
+            slope_mV_dec=cp.slope_mV_dec, j0_Acm2=cp.j0_Acm2, alpha=cp.alpha,
+            R2=cp.R2, n_fit=cp.n_fit, fit_min_Acm2=cp.fit_window_Acm2[0],
+            fit_max_Acm2=cp.fit_window_Acm2[1], NdMn_atomic=cp.NdMn_atomic,
+            an_load_mgcm2=cp.an_load_mgcm2, anode_price_usd_g=cp.anode_price_usd_g(),
+            source=cp.source))
+    return pd.DataFrame(rows)
+
+
+def list_catalysts() -> pd.DataFrame:
+    return catalyst_parameter_table()
+
+
+def report_catalyst(j_points=(0.1, 0.5, 1.0, 1.5, 2.0)) -> None:
+    p = get_catalyst()
+    lo, hi = p.fit_window_Acm2
+    dec = p.extrapolation_decades(J_MAX)
+    print(f"[catalyst] {p.name}: b={p.slope_mV_dec:.2f} mV/dec, "
+          f"j0={p.j0_Acm2:.16g} A/cm2, load={p.an_load_mgcm2:g} mg/cm2")
+    print(f"  source={p.source} | fit={lo*1000:g}–{hi*1000:g} mA/cm2")
+    print(f"  anode price={p.anode_price_usd_g():.8g} USD/g; cost factor=1.3")
+    if np.isfinite(dec) and dec > EXTRAPOLATION_WARN_DECADES:
+        print(f"  [주의] J_MAX={J_MAX:g} A/cm2는 입력 fitting 상한의 {10**dec:.2f}배 "
+              f"({dec:.2f} decades)입니다. 해당 운전점은 Tafel 외삽값입니다.")
+    if p.name == "IrO2" and "○○" in p.source:
+        print("  [주의] IrO2의 source는 donor에 남아 있던 미완성 인용 표기입니다.")
+    if p.name != "IrO2":
+        print("  [주의] 열화·수명은 기존 Su 커널/공통 앵커 유지. NMO별 실측 수명 모델이 아닙니다.")
+    j = np.array(j_points, dtype=float)
+    print(pd.DataFrame({"j [A/cm2]": j, "eta_an [mV]": p.eta(j) * 1000})
+          .to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
 # %%
 # PART 4 — PEM 셀 전압 모델
@@ -380,7 +619,7 @@ def cell_voltage_parts(j_Acm2) -> dict:
     U0 = 1.5184 - 1.5421e-3 * T + 9.523e-5 * T * np.log(T) + 9.84e-8 * T ** 2
     e_rev = U0 + (R_CONST * T / (2.0 * F_CONST)) * np.log(p_h2 * np.sqrt(p_o2))
 
-    eta_act_an = IRO2.eta(j)
+    eta_act_an = get_catalyst().eta(j)
 
     eta_act_ca = (R_CONST * T / (N_ELECTRON_H2 * ALPHA_CA * F_CONST)) \
         * np.arcsinh(j / (2.0 * J0_CA))
@@ -418,6 +657,18 @@ def SEC_stack(j):
 
 def SEC_system(j):
     return SEC_stack(j) + BOP_EFFICIENCY
+
+def cell_voltage_table(j_points=None) -> pd.DataFrame:
+    j = np.linspace(J_MIN, J_MAX, 201) if j_points is None else np.atleast_1d(np.asarray(j_points, dtype=float))
+    if np.any(~np.isfinite(j)) or np.any(j <= 0) or np.any(j >= J_LIM):
+        raise ValueError("전압 표의 j는 유한하고 0 < j < J_LIM이어야 합니다")
+    parts = cell_voltage_parts(j)
+    return pd.DataFrame({"catalyst": get_catalyst().name, "j_Acm2": j,
+        "e_rev_V": parts["e_rev"], "eta_an_V": parts["eta_act_an"],
+        "eta_ca_V": parts["eta_act_ca"], "eta_ohm_V": parts["eta_ohm"],
+        "eta_mt_V": parts["eta_mt"], "V_cell_V": parts["V"],
+        "SEC_stack_kWh_kg": SEC_stack(j), "SEC_system_kWh_kg": SEC_system(j)})
+
 
 def h2_area(j):
     j = np.atleast_1d(np.asarray(j, dtype=float))
@@ -470,7 +721,7 @@ def operating_window(A_tot: float, j_min: float | None = None,
 
 def _kernel_signature() -> tuple:
     return (T_OPER, MEMB_T_UM, MEMB_LAMBDA, SIGMA_SCALE, J_LIM, BOP_EFFICIENCY,
-            IRO2.slope_mV_dec, IRO2.j0_Acm2, J0_CA, ALPHA_CA, P_AN, P_CAT)
+            get_catalyst().signature(), J0_CA, ALPHA_CA, P_AN, P_CAT)
 
 class PowerToJ:
 
@@ -511,8 +762,9 @@ def stack_material_costs(N_total_cells: float, N_stacks: float,
 
     membrane = _mem_cost_per_m2(MEMB_T_UM) * area_m2
 
-    an_cat_g = IRO2.an_load_mgcm2 * area_cm2 / 1000.0
-    an_cat = an_cat_g * METAL_PRICE["Ir"] * 1.3
+    cat = get_catalyst()
+    an_cat_g = cat.an_load_mgcm2 * area_cm2 / 1000.0
+    an_cat = an_cat_g * cat.anode_price_usd_g() * 1.3
 
     ca_cat_g = CA_LOAD_mgcm2 * area_cm2 / 1000.0
     ca_cat = ca_cat_g * METAL_PRICE[CA_CAT] * 1.3
@@ -569,6 +821,7 @@ class FixedStack:
     capex_stack: float
     capex_bop: float
     cost_breakdown: dict = field(default_factory=dict)
+    catalyst: dict = field(default_factory=catalyst_metadata)
 
     @property
     def capex_fix(self) -> float:
@@ -1041,7 +1294,6 @@ _SU_TOP_SLOPE = float((_SU_CONST_UV[2] - _SU_CONST_UV[1])
 
 
 def su_degradation(j: float) -> float:
-    """Su 정전류 열화율 [uV/h]. j > 3은 지정 외삽 규칙 적용."""
     j = float(j)
     if j <= 0.0:
         return 0.0
@@ -1089,24 +1341,20 @@ def _dynamic_factor_vec(j: np.ndarray, delta_j: np.ndarray) -> np.ndarray:
     return np.where(j <= 0.0, 1.0, 1.0 + (_su_solar_factor_vec(j) - 1.0) * sev)
 
 def stack_eol_delta_v(j_ref: float | None = None) -> float:
-    """EOL 임계전압 [V] = V_BOL × (1 / retention - 1)."""
     j_ref = DEG_J_REF if j_ref is None else float(j_ref)
     j_ref = float(np.clip(j_ref, J_MIN, J_LIM))
     v0 = float(np.atleast_1d(V(j_ref))[0])
     return v0 * (1.0 / max(float(STACK_EOL_RETENTION), 1e-9) - 1.0)
 
 def deg_anchor_rate_uV_h(j_ref: float | None = None) -> float:
-    """앵커 열화율 [uV/h] = EOL 임계전압 / 스택 수명."""
     return stack_eol_delta_v(j_ref) / max(float(STACK_LIFETIME_H), 1.0) * 1.0e6
 
 def deg_anchor_scale(j_ref: float | None = None) -> float:
-    """Su 열화율을 기준 전류밀도·스택 수명에 맞춰 환산합니다."""
     j_ref = DEG_J_REF if j_ref is None else float(j_ref)
     j_ref = float(np.clip(j_ref, J_MIN, J_LIM))
     return deg_anchor_rate_uV_h(j_ref) / max(su_degradation(j_ref), 1e-12)
 
 def degradation_summary(j_profile, dt=1.0, initial_j: float = 0.0, analysis_years=None) -> dict:
-    """정상 손상은 운전시간, 기동·정지·변화 손상은 이벤트별 적산."""
     j = np.atleast_1d(sanitize_operating_j(j_profile)).astype(float)
     if j.ndim != 1 or len(j) == 0:
         raise ValueError("전류밀도 프로파일은 비어 있지 않은 1차원 배열이어야 합니다")
@@ -1181,6 +1429,7 @@ def _deg_config_fingerprint() -> tuple:
             J_MIN, J_MAX, J_LIM, DEG_EVENT_REFERENCE_H, _kernel_signature())
 
 def ensure_degradation(res) -> dict:
+    _require_active_catalyst(res.meta["catalyst"], res.case)
     fp = _deg_config_fingerprint()
     if res.meta.get("degradation_fp") != fp:
         j = res.meta.get("segment_j", res.j)
@@ -1260,6 +1509,9 @@ class DispatchResult:
     meta: dict = field(default_factory=dict)
     timestamps: pd.DatetimeIndex | None = None
 
+    def __post_init__(self):
+        self.meta.setdefault("catalyst", catalyst_metadata())
+
     @property
     def E_used(self) -> float:
         return self.E_bop + self.E_stack
@@ -1329,7 +1581,7 @@ class DispatchResult:
 def compare_table(results: dict, lcohs: dict | None = None) -> pd.DataFrame:
     rows = []
     for name, r in results.items():
-        row = {"case": name, "mean_annual_H2 [t]": _annual_mean(r, r.H2_total) / 1000.0,
+        row = {"case": name, "catalyst": r.meta["catalyst"]["name"], "mean_annual_H2 [t]": _annual_mean(r, r.H2_total) / 1000.0,
                "SEC_eff [kWh/kg]": r.SEC_eff(), "op_hours [h/yr]": _annual_mean(r, r.op_hours),
                "curtail [%]": r.E_curtail / r.E_paid * 100 if r.E_paid else np.nan,
                "idle [%]": r.E_idle / r.E_paid * 100 if r.E_paid else np.nan,
@@ -1614,7 +1866,7 @@ _LIFECYCLE_COST_KEYS = ("electricity", "curtailment_penalty", "fixed_OM",
 
 def lifecycle_lcoh(res: DispatchResult, stack: FixedStack, capex_ess=0.0,
                    elec_price=None, penalty_mult=None, years=None) -> dict:
-    """관측연도별 BOL 결과를 사업기간에 순환 적용하는 연간 집계 DCF."""
+    _require_active_catalyst(stack.catalyst, "FixedStack")
     price = float(ELEC_PRICE if elec_price is None else elec_price)
     mult = float(ELEC_PENALTY_MULT if penalty_mult is None else penalty_mult)
     years = int(LIFETIME_YR if years is None else years)
@@ -1659,7 +1911,7 @@ def lifecycle_lcoh(res: DispatchResult, stack: FixedStack, capex_ess=0.0,
     items_usd = dict(capex=capex_total, **pv_opex)
     items_per_kg = {k: v / pv_h2 for k, v in items_usd.items()} if pv_h2 > 0 else {}
     ess_pv = capex_ess + (fixed_om_ess + ANNUAL_BATT_REPL_USD) * pv_factor
-    return dict(LCOH=lcoh, annual_cost=pv_cost / pv_factor, annual_H2=annual_H2,
+    return dict(catalyst=dict(res.meta["catalyst"]), LCOH=lcoh, annual_cost=pv_cost / pv_factor, annual_H2=annual_H2,
         annual_H2_std=float(annual.H2_kg.std(ddof=1)) if len(annual) > 1 else 0.0,
         annual_H2_mean=float(life.H2_kg.mean()), H2_total_life_kg=float(life.H2_kg.sum()),
         items_usd=items_usd, items_usd_per_kg=items_per_kg,
@@ -1748,11 +2000,14 @@ def setup_plots() -> None:
             continue
 
 def _finish(fig, name: str) -> None:
-    import os
-    _FIGURE_MANIFEST.append({"filename": f"{name}.png", "titles": " | ".join(ax.get_title() for ax in fig.axes)})
-    d = _ensure_fig_dir()
-    if d:
-        fig.savefig(os.path.join(d, f"{name}.png"), bbox_inches="tight", dpi=FIG_DPI)
+    directory = _ensure_fig_dir()
+    for fmt in FIG_FORMATS:
+        extension = str(fmt).lower().lstrip(".")
+        _FIGURE_MANIFEST.append({"filename": f"{name}.{extension}",
+                                 "titles": " | ".join(ax.get_title() for ax in fig.axes)})
+        if directory:
+            fig.savefig(Path(directory) / f"{name}.{extension}",
+                        bbox_inches="tight", dpi=FIG_DPI)
     if SHOW_FIGURES:
         plt.show()
     else:
@@ -1831,6 +2086,7 @@ def dispatch_case1(P_in: np.ndarray, A_tot: float, j_min: float, j_max: float,
 def run_case1(profile=None, fixed_stack=None, j_star=None, verbose=True) -> dict:
     profile = profile or get_profile()
     fixed_stack = fixed_stack or build_fixed_stack(profile, verbose=verbose)
+    _require_active_catalyst(fixed_stack.catalyst, "FixedStack")
     win = operating_window(fixed_stack.A_tot)
 
     if verbose:
@@ -2173,6 +2429,7 @@ class NoFeasibleDesignError(RuntimeError):
 def evaluate_fixed_design(profile, fixed_stack, design: ESSDesign, *,
                           warm_start=None, initial_state=None) -> dict:
     """설비를 다시 사이징하지 않고 고정 설계를 평가."""
+    _require_active_catalyst(fixed_stack.catalyst, "FixedStack")
     if design.case not in (C2_NAME, C3_NAME):
         raise ValueError("ESSDesign.case는 'Case 2' 또는 'Case 3'여야 합니다")
     if not J_MIN <= design.j_star <= J_MAX:
@@ -2220,7 +2477,8 @@ def _size_ess(case, profile, fixed_stack, j, q_grid=None, verbose=True):
     # 특히 중요하다. 이런 후보는 RTE 손실·재기동 비용 때문에 어차피 최적점이 될
     # 수 없으므로 dispatch를 돌리기 전에 걸러낸다 — 검증 결과 최적 조합·LCOH는
     # 완전히 동일하게 나오고 속도만 개선된다. case2는 이 문제가 관측되지 않아
-    # 그대로 둔다(기존 1e-9 기준 유지).
+    # 그대로 둔다(기존 1e-9 기준 유지). (2026-09-18: 0918 리라이트에도 동일한
+    # 구조로 버그가 재발해 다시 적용함 — pstar/is_c2는 위에서 이미 계산됨)
     min_E_for_dispatch = (0.05 * pstar) if not is_c2 else 0.0
 
     def evaluate(q):
@@ -2304,6 +2562,7 @@ def _run_ess_case(case, profile=None, fixed_stack=None, j_star=None, cap_hours=N
                   optimize=True, verbose=True, *, design=None):
     profile = profile or get_profile()
     fixed_stack = fixed_stack or build_fixed_stack(profile, verbose=verbose)
+    _require_active_catalyst(fixed_stack.catalyst, "FixedStack")
     name = C2_NAME if case == "case2" else C3_NAME
     cap_df, opt, result = pd.DataFrame(), None, None
     rippl = float("nan")
@@ -2489,12 +2748,26 @@ def run_case3(profile=None, fixed_stack=None, j_star=None, cap_hours=None,
 
 
 
+
+
 # %%
-# PART 14 — 3케이스 비교 그래프
+# PART 14 — 계산 · 민감도 · 결과 저장 (그래프 없음)
 ########################################################################################
 ########################################################################################
 
 _CASE_ORDER = ["Case 1", "Case 2", "Case 3"]
+
+_LCOH_ITEM_LABELS = {
+    "capex": "CAPEX",
+    "fixed_OM": "fixed O&M",
+    "stack_replacement": "stack replacement",
+    "battery_replacement": "battery replacement",
+    "electricity": "electricity",
+    "curtailment_penalty": "curtailment penalty",
+    "variable_OM": "variable O&M",
+    "water": "water",
+}
+
 
 
 def _production_hours(res, dt: float | None = None) -> dict:
@@ -2514,6 +2787,1082 @@ def _production_hours(res, dt: float | None = None) -> dict:
             "generation_absent_hours": float((~gen).sum() * step)}
 
 
+
+def lcoh_vs_j_case1(profile, fixed_stack, n: int = 25) -> pd.DataFrame:
+    j_lo, j_hi = max(2.0 * J_MIN, 0.4), 0.92 * J_LIM
+    rows = []
+    for jr in np.unique(np.r_[np.linspace(j_lo, j_hi, n), fixed_stack.j_rated]):
+        st = size_fixed_stack(fixed_stack.P_nameplate, j_rated=float(jr))
+        res = dispatch_case1(profile.P_in, st.A_tot, J_MIN, float(jr), dt=profile.dt, timestamps=profile.timestamps)
+        lc = lcoh_compare(res, st, capex_ess=0.0)
+        rows.append({"j": float(jr), "LCOH": lc["LCOH"], "H2_t": _annual_mean(res, res.H2_total) / 1e3,
+                     "curtail_%": res.E_curtail / res.E_paid * 100 if res.E_paid else np.nan})
+    return pd.DataFrame(rows)
+
+
+
+def lcoh_vs_j_case23(profile, fixed_stack, cap_hours, case, n=17, *, design=None):
+    rows = []
+    grid = np.linspace(J_MIN, J_MAX, n)
+    if design is not None:
+        grid = np.unique(np.r_[grid, design.j_star])
+    for j in grid:
+        op = c2_operating_point(float(j), fixed_stack.A_tot)
+        if design is None:
+            E = float(cap_hours) * op["P_star"]
+            prc = (c2_charge_rating if case == C2_NAME else c3_charge_rating)(profile, op["P_star"])
+            d = ESSDesign(case, float(j), E, prc, op["P_star"])
+        else:
+            if case != design.case:
+                raise ValueError("민감도 Case와 설계 Case가 다릅니다")
+            if case == C2_NAME and op["P_star"] > design.P_rated_dis + 1e-8:
+                continue
+            d = ESSDesign(case, float(j), design.E_rated, design.P_rated_chg,
+                          design.P_rated_dis, design.sizing_q)
+        out = evaluate_fixed_design(profile, fixed_stack, d)
+        r, lc = out["result"], out["lcoh"]
+        if not np.isfinite(lc["LCOH"]):
+            continue
+        rows.append(dict(j=float(j), LCOH=lc["LCOH"], H2_t=_annual_mean(r, r.H2_total)/1e3,
+                         E_rated=d.E_rated, P_rated_chg=d.P_rated_chg,
+                         P_rated_dis=d.P_rated_dis, op_hours=_annual_mean(r, r.op_hours)))
+    return pd.DataFrame(rows)
+
+
+
+def _ess_sizing_key(out: dict | None) -> str:
+    if not out:
+        return "-"
+    df = out.get("cap_sweep")
+    if isinstance(df, pd.DataFrame) and len(df):
+        k = int(df["LCOH_internal"].idxmin())
+        return f"q = {df.loc[k, 'q [%]']:g} % (일별 잉여 분위수)"
+    design = out.get("design")
+    if design is not None and design.sizing_q is not None:
+        return f"q = {design.sizing_q:g} % (다년 일별 잉여 분위수)"
+    return "고정 설비 평가"
+
+
+
+def ess_summary_table(out2: dict | None, out3: dict | None) -> pd.DataFrame:
+    rows = [{"case": "Case 1",
+             "ESS 용량 E_rated [kWh]": 0.0,
+             "ESS 용량 [MWh]": 0.0,
+             "등가 저장시간 [h of P*]": 0.0,
+             "ESS 출력 P_rated [kW]": 0.0,
+             "ESS CAPEX [USD]": 0.0,
+             "등가 사이클 [cyc/yr]": 0.0,
+             "운전 j* [A/cm2]": float("nan"),
+             "사이징 근거": "ESS 없음 (직결)"}]
+
+    for case, out in (("Case 2", out2), ("Case 3", out3)):
+        if not out:
+            continue
+        r = out.get("result")
+        E = float(out.get("E_rated", getattr(r, "E_rated", 0.0)) or 0.0)
+        P_star = float((out.get("op") or {}).get("P_star", 0.0) or 0.0)
+        if P_star <= 0:
+            P_star = float(getattr(r, "P_star", 0.0) or 0.0)
+        P_rated = max(float(getattr(r, "P_rated_chg", 0.0) or 0.0),
+                      float(getattr(r, "P_rated_dis", 0.0) or 0.0))
+        rows.append({
+            "case": case,
+            "ESS 용량 E_rated [kWh]": E,
+            "ESS 용량 [MWh]": E / 1e3,
+            "등가 저장시간 [h of P*]": E / P_star if P_star > 0 else float("nan"),
+            "ESS 출력 P_rated [kW]": P_rated,
+            "ESS CAPEX [USD]": float(out.get("capex_ess", 0.0) or 0.0),
+            "등가 사이클 [cyc/yr]": _annual_mean(r, float(getattr(r, "eq_cycles", 0.0) or 0.0)),
+            "운전 j* [A/cm2]": float(out.get("j_star", float("nan"))),
+            "사이징 근거": _ess_sizing_key(out),
+        })
+    return pd.DataFrame(rows).set_index("case")
+
+
+
+def print_ess_summary(out2: dict | None, out3: dict | None,
+                      title: str = "ESS 용량 최적화 결과 (E_rated*)",
+                      save_csv: bool | str = False) -> pd.DataFrame:
+    df = ess_summary_table(out2, out3)
+    _banner(title, "-")
+    print(f"  mode=surplus_q, c_E={C_E_USD_KWH} $/kWh, "
+          f"c_P={C_P_USD_KW} $/kW, RTE={ETA_RTE:.2f}")
+    cols = ["ESS 용량 E_rated [kWh]", "ESS 출력 P_rated [kW]",
+            "ESS CAPEX [USD]", "등가 사이클 [cyc/yr]", "운전 j* [A/cm2]", "사이징 근거"]
+    print(df[cols].to_string(float_format=lambda x: f"{x:,.2f}"))
+    e2 = df.loc["Case 2", "ESS 용량 E_rated [kWh]"] if "Case 2" in df.index else np.nan
+    e3 = df.loc["Case 3", "ESS 용량 E_rated [kWh]"] if "Case 3" in df.index else np.nan
+    if np.isfinite(e2) and np.isfinite(e3) and e2 > 0:
+        print(f"  Case3/Case2 E_rated={e3 / e2 * 100:,.1f} % "
+              f"(reduction={100 - e3 / e2 * 100:,.1f} %)")
+    if save_csv:
+        try:
+            if isinstance(save_csv, str):
+                path = save_csv
+            else:
+                d = _ensure_fig_dir()
+                path = f"{d}/ESS_sizing_summary.csv" if d else "ESS_sizing_summary.csv"
+            df.to_csv(path, encoding="utf-8-sig")
+            print(f"  saved: {path}")
+        except Exception as e:
+            print(f"  [WARN] ESS summary CSV save failed: {e}")
+    return df
+
+
+
+def lifecycle_summary_table(lcohs: dict) -> pd.DataFrame:
+    rows = []
+    for case in _CASE_ORDER:
+        lc = (lcohs or {}).get(case)
+        if not lc:
+            continue
+        life = lc.get("lifecycle")
+        rows.append({
+            "case": case,
+            "LCOH [$/kg]": lc.get("LCOH", np.nan),
+            "BOL 연평균 H2 [t]": lc.get("annual_H2", np.nan) / 1e3,
+            "생애 H2 합계 [t]": lc.get("H2_total_life_kg", np.nan) / 1e3,
+            "생애 평균 H2 [t/yr]": lc.get("annual_H2_mean", np.nan) / 1e3,
+            "최종연도 열화손실 [%]": lc.get("H2_fade_pct", np.nan),
+            "스택 교체 [회]": lc.get("replacement_count", np.nan),
+            "평균 유지율 [%]": lc.get("retention_mean_pct", np.nan),
+            "효율 yr1 [%HHV]": (float(life["eff_HHV_pct"].iloc[0])
+                               if life is not None and len(life) else np.nan),
+            "효율 최종 [%HHV]": (float(life["eff_HHV_pct"].iloc[-1])
+                                if life is not None and len(life) else np.nan),
+            "교체비 현재가치 [k$]": lc.get("items_usd", {}).get("stack_replacement", np.nan) / 1e3,
+        })
+    return pd.DataFrame(rows).set_index("case") if rows else pd.DataFrame()
+
+
+
+def print_lifecycle_summary(lcohs: dict, title: str = "스택 열화 · 교체 lifecycle 결과") -> pd.DataFrame:
+    df = lifecycle_summary_table(lcohs)
+    _banner(title, "-")
+    if not len(df):
+        print("  (lifecycle 결과 없음)")
+        return df
+    print(f"  kernel=Su et al. 2024 (anchored), applies_to=stack, "
+          f"앵커={STACK_LIFETIME_H:,.0f} h @ EOL 유지율 {STACK_EOL_RETENTION * 100:.0f} % "
+          f"({deg_anchor_rate_uV_h():.2f} uV/h @ j={DEG_J_REF:.2f}), "
+          f"프로젝트={LIFETIME_YR} yr, 교체 정지={REPLACEMENT_DOWNTIME_H:,.0f} h/회")
+    print(df.to_string(float_format=lambda x: f"{x:,.2f}"))
+    return df
+
+
+
+def _require_summary_excel_engine() -> None:
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "최종 요약 Excel 저장에는 openpyxl이 필요합니다. "
+            "실행 환경에서 'python -m pip install openpyxl'을 실행하세요. "
+            "Excel 저장을 끄려면 SAVE_FINAL_SUMMARY_XLSX = False로 설정하세요."
+        ) from exc
+
+
+
+def _summary_filename_part(value, fallback: str) -> str:
+    import re
+    name = _normalize_re_name(value)
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+    name = re.sub(r"\s+", "_", name).strip(" ._")
+    return name[:40] or fallback
+
+
+
+def _save_new_summary_file(directory: Path, stem: str, content: bytes) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    number = 0
+    while True:
+        suffix = "" if number == 0 else f"_{number:03d}"
+        path = directory / f"{stem}{suffix}.xlsx"
+        try:
+            stream = path.open("xb")
+        except FileExistsError:
+            number += 1
+            continue
+        try:
+            with stream:
+                stream.write(content)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
+        return path
+
+
+
+def export_final_summary_excel(profile, fixed_stack, metrics: pd.DataFrame,
+                               lcoh_items: pd.DataFrame,
+                               winner: tuple, best_h2: tuple) -> Path:
+    from datetime import datetime
+    from io import BytesIO
+
+    _require_summary_excel_engine()
+    from openpyxl.styles import Alignment, Border, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    kind = _normalize_re_name(profile.meta.get("kind") or RE_KIND)
+    region = _normalize_re_name(profile.region or RE_REGION_NAME)
+    if region.endswith(" " + kind):
+        region = region[:-(len(kind) + 1)].strip()
+    if not region or region == "(unset)":
+        region = _normalize_re_name(RE_REGION_NAME)
+    cat = get_catalyst()
+    _require_active_catalyst(fixed_stack.catalyst, "Excel export / FixedStack")
+    stem = (f"{_summary_filename_part(region, 'region')}_"
+            f"{_summary_filename_part(kind, 'renewable')}_"
+            f"{_summary_filename_part(cat.name, 'catalyst')}")
+
+    directory = Path(FINAL_SUMMARY_DIR).expanduser()
+    if not directory.is_absolute():
+        base = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+        directory = base / directory
+
+    config_rows = [
+        ("저장 시각", datetime.now().astimezone().isoformat(timespec="seconds"), "실행 환경 현지시각 / UTC offset 포함"),
+        ("지역", region, "실제 입력 프로파일"),
+        ("재생에너지 종류", kind, "실제 입력 프로파일"),
+        ("입력 표시명", profile.region, "input"),
+        ("분석 기간", profile.period_label, "관측연도"),
+        ("분석 연수", profile.n_years, "yr"),
+        ("입력 출처", profile.source, "source"),
+        ("선택 촉매", cat.name, "CATALYST_NAME"),
+        ("촉매 Tafel 기울기 b", cat.slope_mV_dec, "mV/dec"),
+        ("촉매 교환전류밀도 j0", cat.j0_Acm2, "A/cm2"),
+        ("촉매 alpha", cat.alpha, "보관/규약 확인용; 전압식에 중복 적용하지 않음"),
+        ("촉매 fitting R2", cat.R2, "donor 원값"),
+        ("촉매 fitting 데이터 수", cat.n_fit, "n_fit"),
+        ("촉매 fitting 하한", cat.fit_window_Acm2[0], "A/cm2"),
+        ("촉매 fitting 상한", cat.fit_window_Acm2[1], "A/cm2; 운전 범위와 구분"),
+        ("촉매 Nd/Mn 원자비", cat.NdMn_atomic, "ICP 비율; donor 원값"),
+        ("양극 촉매 로딩", cat.an_load_mgcm2, "mg/cm2; donor 질량 기준 유지"),
+        ("양극 촉매 혼합 단가", cat.anode_price_usd_g(), "USD/g; donor 혼합식 유지"),
+        ("양극 촉매 원가 배율", 1.3, "질량 × 혼합 단가 × 1.3"),
+        ("촉매 입력 출처", cat.source, "첨부 코드의 source 문자열; 독립 검증 문헌 인용 아님"),
+        ("촉매 외부 파일", str(CATALYST_PARAM_FILE) if CATALYST_PARAM_FILE is not None else "사용 안 함", "None이면 내장 PARAM_TABLE"),
+        ("촉매별 내구성", "기존 Su 열화 커널과 공통 수명 앵커 유지", "NMO별 실측 수명을 새로 적용한 것이 아님"),
+        ("재생에너지 용량", profile.meta.get("re_capacity_MW", np.nan), "MW; 미지정은 빈칸"),
+        ("연평균 배정 전력량", profile.E_paid / profile.n_years / 1e3, "MWh/yr"),
+        ("이용률 CF", profile.meta.get("unit_CF", np.nan) * 100, "% ; 최종 요약과 동일 기준"),
+        ("배정 비율", profile.allocation_n * 100, "%"),
+        ("시간 간격", profile.dt, "h"),
+        ("PEM 명판 용량", fixed_stack.P_nameplate / 1000, "MW"),
+        ("전류밀도 하한 J_MIN", J_MIN, "A/cm2"),
+        ("전류밀도 상한 J_MAX", J_MAX, "A/cm2"),
+        ("전기 단가 ELEC_PRICE", ELEC_PRICE, "$/kWh"),
+        ("LCOH 기준", "lifecycle", "최종 요약 기준"),
+        ("열화 모델", "Su2024/anchored", "stack"),
+        ("EOL 유지율", STACK_EOL_RETENTION * 100, "%"),
+        ("스택 수명 앵커", STACK_LIFETIME_H, "h"),
+        ("스택 교체비 비율", REPL_STACK_FRAC * 100, "% of capex_stack"),
+        ("프로젝트 기간", LIFETIME_YR, "yr"),
+        ("할인율", INTEREST_RATE * 100, "%"),
+        ("전류밀도 설정 모드", J_STAR_MODE, "J_STAR_MODE"),
+        ("빠른 계산 모드", FAST_MODE, "FAST_MODE"),
+        ("저장 제외 범위", "별도 ESS sizing 표", "case metrics의 ESS 지표는 유지"),
+        ("빈칸 의미", "해당 없음 / 미계산 / 미지정", "원래 NaN인 셀은 0으로 바꾸지 않음"),
+    ]
+    config = pd.DataFrame(config_rows, columns=["항목", "값", "단위 / 설명"])
+    conclusions = pd.DataFrame([
+        {"항목": "LCOH 최저", "case": winner[0], "값": winner[1], "단위": "$/kg"},
+        {"항목": "생산량 최대", "case": best_h2[0], "값": best_h2[1] / 1e3, "단위": "t/yr (BOL)"},
+    ])
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        config.to_excel(writer, sheet_name="설정값", index=False)
+        metrics.to_excel(writer, sheet_name="case_metrics", index=True, index_label="항목")
+        lcoh_items.to_excel(writer, sheet_name="LCOH_breakdown", index=True, index_label="항목 [$/kg]")
+        conclusions.to_excel(writer, sheet_name="결론", index=False)
+        catalyst_parameter_table().to_excel(writer, sheet_name="catalyst_parameters", index=False)
+
+        header_fill = PatternFill("solid", fgColor="17365D")
+        total_fill = PatternFill("solid", fgColor="E2EFDA")
+        for sheet in writer.sheets.values():
+            sheet.sheet_view.showGridLines = False
+            sheet.freeze_panes = "B2" if sheet.title in ("case_metrics", "LCOH_breakdown") else "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            sheet.row_dimensions[1].height = 26
+            for row in sheet.iter_rows():
+                for cell in row:
+                    cell.font = Font(name="Calibri", size=11)
+                    cell.border = Border()
+                    cell.alignment = Alignment(vertical="center", wrap_text=True)
+                    if cell.data_type == "f":
+                        cell.data_type = "s" 
+                    if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                        cell.number_format = ("#,##0.0000" if sheet.title in ("설정값", "LCOH_breakdown")
+                                              else "#,##0.000" if sheet.title == "결론" else "#,##0.00")
+                if row[0].row > 1:
+                    sheet.row_dimensions[row[0].row].height = 30 if sheet.title == "설정값" else 24
+            for cell in sheet[1]:
+                cell.fill = header_fill
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            widths = ([38, 46, 52] if sheet.title == "설정값" else
+                      [24, 18, 22, 22] if sheet.title == "결론" else
+                      [44] + [20] * (sheet.max_column - 1))
+            for i, width in enumerate(widths, start=1):
+                sheet.column_dimensions[get_column_letter(i)].width = width
+            if sheet.title == "설정값":
+                for row in sheet.iter_rows(min_row=2):
+                    if row[0].value == "촉매 교환전류밀도 j0":
+                        row[1].number_format = "0.000000000000000E+00"
+            if sheet.title == "catalyst_parameters":
+                sheet.freeze_panes = "C2"
+                for column in sheet.iter_cols():
+                    header = column[0].value
+                    width = 52 if header == "source" else 26 if header == "j0_Acm2" else 22
+                    sheet.column_dimensions[column[0].column_letter].width = width
+                    for cell in column[1:]:
+                        if header == "j0_Acm2":
+                            cell.number_format = "0.000000000000000E+00"
+                        elif isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                            cell.number_format = "0.###############"
+                for row in sheet.iter_rows(min_row=2):
+                    sheet.row_dimensions[row[0].row].height = 42
+            if sheet.title == "LCOH_breakdown":
+                for cell in sheet[sheet.max_row]:
+                    cell.fill = total_fill
+                    cell.font = Font(name="Calibri", size=11, bold=True)
+
+    return _save_new_summary_file(directory, stem, buffer.getvalue())
+
+
+
+def print_final_summary(profile, fixed_stack, results: dict, lcohs: dict,
+                        out1: dict, out2: dict, out3: dict, sweeps: dict | None = None):
+    _require_active_catalyst(fixed_stack.catalyst, "최종 요약 / FixedStack")
+    _banner(f"최종 요약 — 촉매 {fixed_stack.catalyst['name']}")
+    cap_mw = profile.meta.get("re_capacity_MW", np.nan)
+    cf_txt = (f", CF={profile.meta['unit_CF'] * 100:,.2f} %"
+              if "unit_CF" in profile.meta else "")
+    print(f"  input={profile.region} {profile.period_label}, "
+          f"RE={cap_mw:,.2f} MW" if np.isfinite(cap_mw) else
+          f"  input={profile.region} {profile.period_label}, RE=(unspecified)")
+    print(f"  mean annual E_paid={profile.E_paid / profile.n_years / 1e3:,.1f} MWh{cf_txt}, "
+          f"PEM={fixed_stack.P_nameplate / 1000:,.3f} MW, "
+          f"j_window={J_MIN:.3f}-{J_MAX:.2f} A/cm2, "
+          f"elec={ELEC_PRICE:,.4f} $/kWh")
+    print(f"  LCOH 기준=lifecycle | 열화=Su2024/anchored"
+          f"(EOL {STACK_EOL_RETENTION * 100:.0f} % @ {STACK_LIFETIME_H:,.0f} h), "
+          f"교체비={REPL_STACK_FRAC * 100:.0f} % of capex_stack")
+
+    rows = []
+    for case, out in [("Case 1", out1), ("Case 2", out2), ("Case 3", out3)]:
+        if case not in results:
+            continue
+        r = results[case]
+        h = _production_hours(r, r.dt or 1.0)
+        lc = lcohs[case]
+        j_star = out.get("j_star")
+        sw = (sweeps or {}).get(case)
+        j_opt = float(sw.loc[sw["LCOH"].idxmin(), "j"]) if sw is not None and len(sw) else np.nan
+        rows.append({
+            "case": case,
+            "연평균 생산시간 [h/yr]": _annual_mean(r, h["producing"]),
+            "연평균 정지(발전有) [h/yr]": _annual_mean(r, h["idle_with_gen"]),
+            "연평균 H2 [t] (BOL)": _annual_mean(r, r.H2_total) / 1e3,
+            "생애 H2 [t]": lc.get("H2_total_life_kg", np.nan) / 1e3,
+            "스택 교체 [회]": lc.get("replacement_count", np.nan),
+            "평균 생산율 [kg/h]": r.H2_total / h["producing"] if h["producing"] else np.nan,
+            "운전 j* [A/cm2]": j_star if j_star is not None else np.nan,
+            "평균 운전 j (ON) [A/cm2]": (float(np.dot(r.j, r.on_hours)) / r.op_hours
+                                            if r.op_hours > 0 else np.nan),
+            "평균 j (OFF 포함) [A/cm2]": float(np.dot(r.j, r.on_hours)) / (len(r.P_in) * r.dt),
+            "민감도 최소 j [A/cm2]": j_opt,
+            "ESS 용량 [kWh]": r.E_rated,
+            "ESS 출력 [kW]": max(r.P_rated_chg, r.P_rated_dis),
+            "ESS CAPEX [k$]": lc["capex_ess"] / 1e3,
+            "SEC_eff [kWh/kg]": r.SEC_eff(),
+            "curtail [%]": r.E_curtail / max(r.E_paid, 1e-9) * 100,
+            "LCOH [$/kg]": lc["LCOH"],
+        })
+    df = pd.DataFrame(rows).set_index("case").T
+    print("\n[case metrics]")
+    print(df.to_string(float_format=lambda x: f"{x:,.2f}"))
+
+    items = pd.DataFrame({case: lcohs[case]["items_usd_per_kg"] for case in results}).round(4)
+    items.index = [_LCOH_ITEM_LABELS.get(i, i) for i in items.index]
+    items.loc["TOTAL"] = [lcohs[case]["LCOH"] for case in results]
+    print(f"\n[LCOH breakdown, $/kg]  (기준: lifecycle)")
+    print(items.to_string(float_format=lambda x: f"{x:,.3f}"))
+
+    ess = ess_summary_table(out2, out3)
+    ecols = ["ESS 용량 E_rated [kWh]", "ESS 출력 P_rated [kW]",
+             "ESS CAPEX [USD]", "등가 사이클 [cyc/yr]", "사이징 근거"]
+    print(f"\n[ESS sizing] mode=surplus_q")
+    print(ess[ecols].to_string(float_format=lambda x: f"{x:,.2f}"))
+
+    win = min(((case, lcohs[case]["LCOH"]) for case in results), key=lambda kv: kv[1])
+    best_h2 = max(((case, _annual_mean(results[case], results[case].H2_total)) for case in results), key=lambda kv: kv[1])
+    print(f"\n[결론] LCOH 최저={win[0]} ({win[1]:,.3f} $/kg), "
+          f"생산량 최대={best_h2[0]} ({best_h2[1] / 1e3:,.2f} t/yr)")
+
+    df.attrs["catalyst"] = dict(fixed_stack.catalyst)
+    df.attrs["excel_path"] = None
+    if SAVE_FINAL_SUMMARY_XLSX:
+        excel_path = export_final_summary_excel(profile, fixed_stack, df, items, win, best_h2)
+        df.attrs["excel_path"] = str(excel_path)
+        print(f"\n[최종 요약 Excel 저장] {excel_path}")
+    return df
+
+
+
+def _banner(title: str, ch: str = "=") -> None:
+    print("\n" + ch * 78)
+    print(f" {title}")
+    print(ch * 78)
+
+
+
+def echo_config(profile, fixed_stack, win) -> None:
+    _banner("공유 파라미터 요약 (PART 1)", "-")
+    print(f"  catalyst={get_catalyst().name}, T={T_OPER - 273.15:.0f} C, "
+          f"membrane={MEMB_T_UM:.0f} um, BOP={BOP_EFFICIENCY:.2f} kWh/kg")
+    print(f"  stack={fixed_stack.P_nameplate:,.1f} kW, "
+          f"A_tot={fixed_stack.A_tot:,.0f} cm2, j={J_MIN:.4f}-{J_MAX:.2f} A/cm2, "
+          f"P={win.P_min:,.0f}-{win.P_max:,.0f} kW")
+    print(f"  RE={profile.region} {profile.period_label}, mean annual E_paid={profile.E_paid / profile.n_years / 1e3:,.1f} MWh, "
+          f"n={profile.allocation_n * 100:.0f} %, elec={ELEC_PRICE} $/kWh, "
+          f"ESS(c_E/c_P/RTE)={C_E_USD_KWH}/{C_P_USD_KW}/{ETA_RTE:.2f}")
+    print(f"  LCOH=lifecycle, 열화=Su2024/anchored/stack "
+          f"(EOL {STACK_EOL_RETENTION * 100:.0f} % @ {STACK_LIFETIME_H:,.0f} h), "
+          f"프로젝트={LIFETIME_YR} yr, i={INTEREST_RATE * 100:.1f} %")
+
+
+
+def setup_common(verbose: bool = True, *, profile=None):
+    global _OUTPUT_RUN_TAG
+    get_catalyst()
+    profile = get_profile() if profile is None else profile
+    _FIGURE_MANIFEST.clear()
+    _OUTPUT_RUN_TAG = f"{profile.region.replace(' ', '_')}_{profile.years[0]}_{profile.years[-1]}"
+    if verbose:
+        _banner("공통 셋업")
+        profile.report()
+        report_catalyst()
+        print("\n[선택 촉매의 셀 전압 · SEC]")
+        print(cell_voltage_table([J_MIN, 0.5 * (J_MIN + J_MAX), J_MAX])
+              .to_string(index=False, float_format=lambda x: f"{x:.5f}"))
+    fixed_stack = build_fixed_stack(profile, verbose=verbose)
+    win = operating_window(fixed_stack.A_tot)
+    if verbose:
+        echo_config(profile, fixed_stack, win)
+    return profile, fixed_stack, win
+
+
+
+def export_multiyear_results(profile, results, lcohs, outs, comparison=None, sweeps=None, directory=None):
+    for case, res in results.items():
+        _require_active_catalyst(res.meta["catalyst"], f"CSV export / {case}")
+    directory = _ACTIVE_RESULT_DIR if directory is None else directory
+    if directory is None or not SAVE_RESULT_CSV:
+        return {}
+    d = Path(directory)
+    d.mkdir(parents=True, exist_ok=True)
+    saved = {}
+
+    def save(name, table, index=True):
+        path = d / name
+        table.to_csv(path, index=index, encoding="utf-8-sig")
+        saved[name] = str(path)
+
+    save("catalyst_parameters.csv", catalyst_parameter_table(), index=False)
+    save("cell_voltage_curve.csv", cell_voltage_table(), index=False)
+    for case, r in results.items():
+        key = case.replace(" ", "").lower()
+        annual = annual_result_table(r)
+        save(f"{key}_annual_BOL.csv", annual)
+        save(f"{key}_monthly_H2_by_year.csv", monthly_year_table(r.H2_series, profile.timestamps))
+        save(f"{key}_monthly_H2_statistics.csv", monthly_statistics(r.H2_series, profile.timestamps))
+        save(f"{key}_monthly_hours_by_year.csv", monthly_year_table(r.on_hours, profile.timestamps))
+        save(f"{key}_monthly_hours_statistics.csv", monthly_statistics(r.on_hours, profile.timestamps))
+        save(f"{key}_lifecycle.csv", lcohs[case]["lifecycle"], index=False)
+        hourly = pd.DataFrame({"timestamp": profile.timestamps, "P_in_kW": r.P_in,
+                               "j_A_cm2": r.j, "P_used_kW": r.P_used,
+                               "H2_kg": r.H2_series, "producing_hours": r.on_hours})
+        hourly["j_interval_mean_Acm2"] = r.j * r.on_hours / r.dt
+        if r.soc is not None:
+            hourly["SOC"] = r.soc
+            hourly["E_end_kWh"] = r.soc * r.E_rated
+            hourly["ESS_charge_kW_interval_mean"] = r.charge
+            hourly["ESS_draw_kW_interval_mean"] = r.discharge
+        save(f"{key}_hourly_BOL.csv", hourly, index=False)
+        opt = outs[case].get("opt")
+        if opt is not None and isinstance(opt.get("records"), pd.DataFrame):
+            save(f"{key}_design_search.csv", opt["records"], index=False)
+        if sweeps and case in sweeps:
+            save(f"{key}_LCOH_vs_j.csv", sweeps[case], index=False)
+    generation = profile.P_gen * profile.dt
+    save("RE_annual_generation_kWh.csv", monthly_year_table(generation, profile.timestamps).sum(axis=1).to_frame("generation_kWh"))
+    save("RE_monthly_generation_by_year_kWh.csv", monthly_year_table(generation, profile.timestamps))
+    save("RE_monthly_generation_statistics_kWh.csv", monthly_statistics(generation, profile.timestamps))
+    save("input_quality.csv", pd.DataFrame(profile.meta.get("quality", [])), index=False)
+    save("comparison.csv", comparison if comparison is not None else compare_table(results, lcohs), index=False)
+    if _FIGURE_MANIFEST:
+        save("figure_order.csv", pd.DataFrame(_FIGURE_MANIFEST), index=False)
+    import json
+    manifest = dict(catalyst=catalyst_metadata(),
+        catalyst_parameter_file=str(CATALYST_PARAM_FILE) if CATALYST_PARAM_FILE is not None else None,
+        catalyst_model_note="donor Tafel/cost parameters; shared Su degradation and lifetime anchor; no catalyst-specific durability calibration",
+        region=profile.region, source_years=list(profile.years),
+        project_years=LIFETIME_YR, project_source_years=lcohs[next(iter(lcohs))]["lifecycle"].source_year.astype(int).tolist(),
+        annual_statistics="calendar-year means; sample SD ddof=1", monthly_basis="BOL; no degradation derating",
+        lifecycle_basis="repeat source-year BOL totals; annual-rate post-processing; not degradation-coupled hourly dispatch",
+        warm_start_days=WARM_START_DAYS, warm_start_scope="once before full observed sequence; excluded",
+        initial_storage={c: r.E_start for c, r in results.items()},
+        final_storage={c: r.E_end for c, r in results.items()},
+        source_paths=[str(Path(p).relative_to(Path(__file__).resolve().parent))
+                      if Path(p).is_relative_to(Path(__file__).resolve().parent) else str(p)
+                      for p in profile.meta.get("paths", [])], dt_hours=profile.dt,
+        input_validation=dict(missing_policy=RE_MISSING_POLICY,
+            low_cf_policy=RE_LOW_CF_POLICY, min_annual_cf=RE_MIN_ANNUAL_CF,
+            low_cf_years=profile.meta.get("low_cf_years", []),
+            zero_generation_years=profile.meta.get("zero_generation_years", [])),
+        physical_parameters=dict(T_OPER=T_OPER, J_MIN=J_MIN, J_MAX=J_MAX,
+            STACK_NAMEPLATE_KW=STACK_NAMEPLATE_KW, RE_CAPACITY_MW=RE_CAPACITY_MW,
+            ALLOCATION_N=ALLOCATION_N, CASE2=CASE2, CASE3=CASE3),
+        economic_parameters=dict(ELEC_PRICE=ELEC_PRICE, INTEREST_RATE=INTEREST_RATE,
+            C_E_USD_KWH=C_E_USD_KWH, C_P_USD_KW=C_P_USD_KW),
+        designs={c: dict(j_star=r.j_star, E_rated=r.E_rated, P_rated_chg=r.P_rated_chg,
+                        P_rated_dis=r.P_rated_dis) for c, r in results.items()})
+    path = d / "run_config.json"
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    saved[path.name] = str(path)
+    return saved
+
+
+
+def sensitivity_stack_fraction(fractions=(0.25, 0.4, 0.55, 0.7, 1.0),
+                               verbose: bool = True) -> pd.DataFrame:
+    global STACK_PV_FRACTION
+    profile = get_profile()
+    backup, rows = STACK_PV_FRACTION, []
+    try:
+        for f in fractions:
+            STACK_PV_FRACTION = f
+            st = build_fixed_stack(profile, verbose=False)
+            o1 = run_case1(profile, st, verbose=False)
+            o2 = run_case2(profile, st, verbose=False)
+            o3 = run_case3(profile, st, verbose=False)
+            lc = {"C1": o1["lcoh"]["LCOH"], "C2": o2["lcoh"]["LCOH"],
+                  "C3": o3["lcoh"]["LCOH"]}
+            rows.append({"PV fraction": f, "nameplate [kW]": st.P_nameplate,
+                         "C1 curtail [%]": o1["result"].E_curtail / o1["result"].E_paid * 100,
+                         "C1 H2 [t]": _annual_mean(o1["result"], o1["result"].H2_total) / 1e3,
+                         "C2 H2 [t]": _annual_mean(o2["result"], o2["result"].H2_total) / 1e3,
+                         "C3 H2 [t]": _annual_mean(o3["result"], o3["result"].H2_total) / 1e3,
+                         "C1 LCOH": lc["C1"], "C2 LCOH": lc["C2"], "C3 LCOH": lc["C3"],
+                         "winner": min(lc.items(), key=lambda kv: kv[1])[0]})
+            if verbose:
+                print(f"  fraction {f:.2f}: nameplate {st.P_nameplate:,.0f} kW done")
+    finally:
+        STACK_PV_FRACTION = backup
+    df = pd.DataFrame(rows)
+    if verbose:
+        _banner("민감도 — 스택 규모 vs 재생 규모")
+        print(df.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
+    return df
+
+
+
+def sensitivity_stack_lifetime(lifetimes=(20_000, 40_000, 60_000, 80_000, 100_000),
+                               case: str = "Case 3", verbose: bool = True) -> pd.DataFrame:
+    global STACK_LIFETIME_H
+    profile, fixed_stack, _ = setup_common(verbose=False)
+    backup, rows = STACK_LIFETIME_H, []
+    runner = {"Case 1": run_case1, "Case 2": run_case2, "Case 3": run_case3}[case]
+    try:
+        for life_h in lifetimes:
+            STACK_LIFETIME_H = float(life_h)
+            out = runner(profile, fixed_stack, verbose=False)
+            lc = out["lcoh"]
+            rows.append({
+                "stack lifetime [h]": life_h,
+                "앵커 uV/h": deg_anchor_rate_uV_h(),
+                "유효 uV/h": lc.get("degradation", {}).get("rate_eff_uV_h", np.nan),
+                "실효 수명 [h]": lc.get("stack_life_hours", np.nan),
+                "교체 [회]": lc.get("replacement_count", np.nan),
+                "생애 H2 [t]": lc.get("H2_total_life_kg", np.nan) / 1e3,
+                "평균 유지율 [%]": lc.get("retention_mean_pct", np.nan),
+                "교체비 [$/kg]": lc["items_usd_per_kg"].get("stack_replacement", np.nan),
+                "LCOH [$/kg]": lc["LCOH"],
+            })
+            if verbose:
+                print(f"  lifetime {life_h:,.0f} h -> LCOH {lc['LCOH']:.3f} $/kg, "
+                      f"교체 {lc.get('replacement_count', 0)}회")
+    finally:
+        STACK_LIFETIME_H = backup
+    df = pd.DataFrame(rows)
+    if verbose:
+        _banner(f"민감도 — 스택 수명 ({case})")
+        print(df.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
+    return df
+
+
+
+# ── 14.1 저장된 dispatch를 해석하기 위한 구간별 표 ─────────────────────────────
+
+def pv_equivalent_current(P_in, stack, window):
+    jg = np.unique(np.r_[0.0, np.geomspace(1e-8, window.j_min, 512),
+                         np.linspace(window.j_min, window.j_max, INVERSION_GRID_N)])
+    pg = P_of_j(jg, stack.A_tot)
+    if not np.all(np.diff(pg) > 0):
+        raise ValueError("진단용 저전류 P(j)가 단조증가하지 않습니다. 전압식을 확인하세요.")
+    return np.interp(np.asarray(P_in, dtype=float), pg, jg)
+
+
+def build_operation_trace(res, stack, window) -> pd.DataFrame:
+    if res.timestamps is None:
+        raise ValueError(f"{res.case}: 시간축이 없는 결과입니다.")
+    ts = pd.DatetimeIndex(res.timestamps)
+    n = len(ts)
+    is_ess = res.case in (C2_NAME, C3_NAME)
+    if is_ess:
+        keys = ("segment_j", "segment_duration_h", "segment_input_index",
+                "segment_charge_kW", "segment_discharge_kW", "segment_E_end_kWh")
+        missing = [key for key in keys if key not in res.meta]
+        if missing:
+            raise ValueError(f"{res.case}: 세부 구간 기록이 없습니다: {missing}. "
+                             "keep_series=True 결과로 PART 14를 실행하세요.")
+        j = np.asarray(res.meta["segment_j"], dtype=float)
+        h = np.asarray(res.meta["segment_duration_h"], dtype=float)
+        ii = np.asarray(res.meta["segment_input_index"], dtype=int)
+        charge = np.asarray(res.meta["segment_charge_kW"], dtype=float)
+        draw = np.asarray(res.meta["segment_discharge_kW"], dtype=float)
+        e1 = np.asarray(res.meta["segment_E_end_kWh"], dtype=float)
+        e0 = np.r_[res.E_start, e1[:-1]]
+        eta = float(res.meta["eta_RTE"])
+        pem = np.where(j > 0, float(res.P_star), 0.0)
+        direct = np.maximum(pem - draw * eta, 0.0)
+        available_j = np.full(len(j), np.nan)
+    else:
+        j = np.asarray(res.j, dtype=float)
+        h = np.full(n, res.dt)
+        ii = np.arange(n, dtype=int)
+        charge = draw = e0 = e1 = np.zeros(n)
+        eta = 1.0
+        pem = np.asarray(res.P_used, dtype=float)
+        direct = pem.copy()
+        available_j = pv_equivalent_current(res.P_in, stack, window)
+        available_j[j > 0] = j[j > 0] 
+
+    if (not len(h) or any(len(a) != len(h) for a in (j, ii, charge, draw, e0, e1))
+            or np.any(h < 0) or ii.min() < 0 or ii.max() >= n or np.any(np.diff(ii) < 0)):
+        raise ValueError(f"{res.case}: 구간 기록의 길이/순서/시간이 유효하지 않습니다.")
+    duration_per_input = np.bincount(ii, weights=h, minlength=n)
+    if not np.allclose(duration_per_input, res.dt, rtol=0, atol=1e-8):
+        raise ValueError(f"{res.case}: 구간 시간 합계가 원래 입력 간격과 다릅니다.")
+
+    prefix = np.r_[np.longdouble(0), np.cumsum(h, dtype=np.longdouble)]
+    first = np.maximum.accumulate(np.where(np.r_[True, np.diff(ii) != 0],
+                                           np.arange(len(ii)), 0))
+    offset0 = np.asarray(prefix[:-1] - prefix[first], dtype=float)
+    offset1 = offset0 + h
+    offset0[np.isclose(offset0, res.dt, rtol=0, atol=1e-9)] = res.dt
+    offset1[np.isclose(offset1, res.dt, rtol=0, atol=1e-9)] = res.dt
+    t0 = ts.take(ii) + pd.to_timedelta(offset0, unit="h")
+    t1 = ts.take(ii) + pd.to_timedelta(offset1, unit="h")
+    prior_j = np.r_[float(res.meta.get("initial_j", 0.0)), j[:-1]]
+    event = np.where((j > 0) & (prior_j <= 0), "START",
+                     np.where((j <= 0) & (prior_j > 0), "STOP", ""))
+    rate = charge - draw
+    if is_ess and not np.allclose(e1 - e0, rate * h, rtol=1e-8,
+                                  atol=max(1e-7, res.E_rated * 1e-9)):
+        raise ValueError(f"{res.case}: 구간 저장량 변화와 충·방전 수지가 맞지 않습니다.")
+    soc0 = e0 / res.E_rated if res.E_rated > 0 else np.zeros(len(j))
+    soc1 = e1 / res.E_rated if res.E_rated > 0 else np.zeros(len(j))
+    p = np.asarray(res.P_in)[ii]
+    status = np.where(j > 0, "ON", "OFF")
+    if not is_ess:
+        status = np.where(j > 0, "ON", np.where(p > 0, "OFF_BELOW_J_MIN", "OFF_NO_GENERATION"))
+    storage_state = np.where(rate > 1e-8, "NET_CHARGING",
+                             np.where(rate < -1e-8, "NET_DISCHARGING", "HOLD"))
+    return pd.DataFrame(dict(input_index=ii, start=t0, end=t1, duration_h=h,
+        j_Acm2=j, PV_equivalent_j_Acm2=available_j, running=j > 0, status=status,
+        event=event, P_in_kW=p, P_PEM_kW=pem, P_direct_kW=direct,
+        ESS_charge_kW=charge, ESS_draw_kW=draw, ESS_to_PEM_kW=draw * eta,
+        ESS_net_kW=rate, E_start_kWh=e0, E_end_kWh=e1,
+        SOC_start=soc0, SOC_end=soc1, storage_state=storage_state))
+
+
+class DailyDateUnavailable(ValueError):
+    """요청 날짜의 완전한 24시간 데이터가 없을 때 사용합니다."""
+
+
+def select_daily_trace(trace: pd.DataFrame, date: str) -> pd.DataFrame:
+    day = pd.Timestamp(date).normalize()
+    if day.tzinfo is not None:
+        raise ValueError("날짜는 시간대 없는 YYYY-MM-DD 형식으로 입력하세요.")
+    end = day + pd.Timedelta(days=1)
+    positive = (trace.duration_h > 0) & (trace.end > day) & (trace.start < end)
+    zero_event = ((trace.duration_h == 0) & (trace.event != "") &
+                  (trace.start >= day) & (trace.start < end))
+    out = trace.loc[positive | zero_event].copy()
+    if out.empty:
+        raise DailyDateUnavailable(f"{day.date()}: 저장 결과에 해당 날짜가 없습니다. "
+            f"저장 범위: {trace.start.min()} ~ {trace.end.max()}")
+    original_start, original_end = out.start.copy(), out.end.copy()
+    out["start"] = out.start.clip(lower=day)
+    out["end"] = out.end.clip(upper=end)
+    lead_h = (out.start - original_start).dt.total_seconds() / 3600.0
+    tail_h = (original_end - out.end).dt.total_seconds() / 3600.0
+    out["E_start_kWh"] += lead_h * out.ESS_net_kW
+    out["E_end_kWh"] -= tail_h * out.ESS_net_kW
+    frac0 = np.divide(lead_h, out.duration_h, out=np.zeros(len(out)), where=out.duration_h > 0)
+    frac1 = np.divide(tail_h, out.duration_h, out=np.zeros(len(out)), where=out.duration_h > 0)
+    ds = out.SOC_end.to_numpy() - out.SOC_start.to_numpy()
+    out["SOC_start"] += frac0 * ds
+    out["SOC_end"] -= frac1 * ds
+    out["duration_h"] = (out.end - out.start).dt.total_seconds() / 3600.0
+    out.loc[original_start < day, "event"] = ""  # 자른 지점은 새로운 기동이 아님
+    if not np.isclose(out.duration_h.sum(), 24.0, rtol=0, atol=1e-6):
+        raise DailyDateUnavailable(f"{day.date()}: 완전한 24시간이 아닙니다 "
+                                  f"({out.duration_h.sum():.6f} h). 다른 날짜로 대체하지 않습니다.")
+    return out.reset_index(drop=True)
+
+
+def operating_current_summary(traces: dict, results: dict, date: str | None = None) -> pd.DataFrame:
+    rows = []
+    for case in _CASE_ORDER:
+        if case not in traces:
+            continue
+        tr = traces[case] if date is None else select_daily_trace(traces[case], date)
+        active = (tr.j_Acm2 > 0) & (tr.duration_h > 0)
+        on_h = float(tr.loc[active, "duration_h"].sum())
+        total_h = float(tr.duration_h.sum())
+        integral = float(np.dot(tr.j_Acm2, tr.duration_h))
+        rows.append(dict(case=case, period="full profile" if date is None else str(pd.Timestamp(date).date()),
+            j_star_Acm2=results[case].j_star,
+            j_mean_ON_Acm2=integral / on_h if on_h > 0 else np.nan,
+            j_mean_all_Acm2=integral / total_h if total_h > 0 else np.nan,
+            j_min_ON_Acm2=float(tr.loc[active, "j_Acm2"].min()) if on_h > 0 else np.nan,
+            j_max_ON_Acm2=float(tr.loc[active, "j_Acm2"].max()) if on_h > 0 else np.nan,
+            ON_hours=on_h, OFF_hours=total_h - on_h, duty_pct=100 * on_h / total_h,
+            starts=int((tr.event == "START").sum()), stops=int((tr.event == "STOP").sum())))
+    return pd.DataFrame(rows)
+
+
+def print_operating_current_summary(traces, results, date=None):
+    df = operating_current_summary(traces, results, date)
+    _banner("운전 전류밀도 — " + ("전체 분석기간" if date is None else str(date)), "-")
+    print("  mean_ON: 실제 ON 시간으로 가중평균 / mean_all: 정지의 j=0을 포함한 시간평균")
+    print("  Case 2/3의 j*: 각 Case에서 선택된 고정 운전점. 두 Case가 같다는 뜻은 아닙니다.")
+    cols = ["case", "j_star_Acm2", "j_mean_ON_Acm2", "j_mean_all_Acm2", "ON_hours", "OFF_hours", "starts", "stops"]
+    print(df[cols].to_string(index=False, float_format=lambda v: f"{v:,.4f}", na_rep="N/A"))
+    return df
+
+
+def export_operation_traces(out: dict, directory: Path, date: str | None = None) -> dict:
+    directory.mkdir(parents=True, exist_ok=True)
+    saved = {}
+    for case, trace in out["operation_traces"].items():
+        key = case.replace(" ", "").lower()
+        table = trace if date is None else select_daily_trace(trace, date)
+        suffix = "all" if date is None else str(pd.Timestamp(date).date())
+        for label, data in (("segments", table), ("events", table.loc[table.event != ""])):
+            path = directory / f"{key}_{label}_{suffix}.csv"
+            data.to_csv(path, index=False, encoding="utf-8-sig")
+            saved[path.name] = str(path)
+    table = operating_current_summary(out["operation_traces"], out["results"], date)
+    path = directory / ("operating_current_summary.csv" if date is None else f"operating_current_summary_{date}.csv")
+    table.to_csv(path, index=False, encoding="utf-8-sig")
+    saved[path.name] = str(path)
+    return saved
+
+
+# ── 14.2 감도 계산도 그래프가 아니라 계산 PART에서만 수행 ─────────────────────
+
+def calculate_j_sweeps(profile, fixed_stack, results, outs, verbose=True):
+    sweeps = {}
+    if verbose:
+        print("\n[PART 14] LCOH–j 민감도 계산 및 저장 (G18~G20 재출력 시 재계산 없음)")
+    if C1_NAME in results:
+        sweeps[C1_NAME] = lcoh_vs_j_case1(profile, fixed_stack)
+    for case in (C2_NAME, C3_NAME):
+        if case in results:
+            out = outs[case]
+            sweeps[case] = lcoh_vs_j_case23(profile, fixed_stack, out["cap_hours"], case,
+                                           design=out["design"])
+    return sweeps
+
+
+# ── 14.3 새 프로세스에서도 열 수 있는 결과 cache ─────────────────────────────
+_CACHE_SCHEMA = 1
+_ACTIVE_RESULT_DIR = None
+
+
+def _cache_pack(value):
+    from dataclasses import fields, is_dataclass
+    if is_dataclass(value) and not isinstance(value, type):
+        return {"__pemwe_dataclass__": type(value).__name__,
+                "fields": {f.name: _cache_pack(getattr(value, f.name)) for f in fields(value)}}
+    if isinstance(value, dict):
+        return {k: _cache_pack(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_cache_pack(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_cache_pack(v) for v in value)
+    return value
+
+
+def _cache_unpack(value):
+    if isinstance(value, dict):
+        if "__pemwe_dataclass__" in value:
+            classes = {c.__name__: c for c in (REProfile, FixedStack, OperatingWindow,
+                                               DispatchResult, ESSDesign, CatalystParams)}
+            cls = classes[value["__pemwe_dataclass__"]]
+            restored = cls.__new__(cls)
+            for key, field_value in value["fields"].items():
+                object.__setattr__(restored, key, _cache_unpack(field_value))
+            return restored
+        return {k: _cache_unpack(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_cache_unpack(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_cache_unpack(v) for v in value)
+    return value
+
+
+def _create_result_directory(profile, stack):
+    from datetime import datetime
+    root = _resolve_path(RESULT_CACHE_DIR)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    label = "_".join((_summary_filename_part(profile.region, "RE"),
+                      f"{profile.years[0]}_{profile.years[-1]}",
+                      _summary_filename_part(stack.catalyst["name"], "catalyst")))
+    directory = root / f"{stamp}_{label}"
+    directory.mkdir(parents=True, exist_ok=False)
+    return directory
+
+
+def save_result_cache(out: dict, path: str | Path | None = None) -> Path:
+    import gzip
+    import json
+    import pickle
+    directory = Path(out["result_directory"])
+    target = directory / "results.pkl.gz" if path is None else _resolve_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    out["cache_path"] = str(target.resolve())
+    payload = {"schema_version": _CACHE_SCHEMA, "result": _cache_pack(out)}
+    temp = target.with_name(target.name + ".tmp")
+    with gzip.open(temp, "wb", compresslevel=3) as stream:
+        pickle.dump(payload, stream, protocol=pickle.HIGHEST_PROTOCOL)
+    temp.replace(target)
+    root = _resolve_path(RESULT_CACHE_DIR)
+    root.mkdir(parents=True, exist_ok=True)
+    import os
+    pointer = {"cache_path": os.path.relpath(target.resolve(), root.resolve()),
+               "catalyst": out["catalyst"]["name"], "profile": out["profile"].region,
+               "period": out["profile"].period_label}
+    (root / "latest_run.json").write_text(json.dumps(pointer, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n[결과 cache 저장] {target}")
+    return target
+
+
+def load_result_cache(path: str | Path | None = None) -> dict:
+    import gzip
+    import json
+    import pickle
+    if path is None:
+        root = _resolve_path(RESULT_CACHE_DIR)
+        pointer = root / "latest_run.json"
+        if not pointer.is_file():
+            raise FileNotFoundError(f"저장 결과가 없습니다: {pointer}. 먼저 PART 14를 한 번 실행하세요.")
+        entry = Path(json.loads(pointer.read_text(encoding="utf-8"))["cache_path"])
+        path = entry if entry.is_absolute() else root / entry
+    target = _resolve_path(path)
+    if not target.is_file():
+        raise FileNotFoundError(f"결과 cache 없음: {target}")
+    with gzip.open(target, "rb") as stream:
+        payload = pickle.load(stream)
+    if payload.get("schema_version") != _CACHE_SCHEMA:
+        raise ValueError("cache 형식이 다릅니다. 이 버전의 PART 14로 저장한 결과가 필요합니다.")
+    out = _cache_unpack(payload["result"])
+    if not out.get("operation_traces"):
+        raise ValueError("운전 구간 기록이 cache에 없습니다. PART 14 결과를 확인하세요.")
+    out["cache_path"] = str(target.resolve())
+    out["result_directory"] = str(target.resolve().parent)
+    print(f"[cache 읽기] {target}\n  실제 저장 조건: {out['profile'].region} / "
+          f"{out['profile'].period_label} / {out['catalyst']['name']}")
+    print("  현재 PART 1의 물리·경제성 설정을 재적용하지 않습니다. 저장 결과 그대로 표시합니다.")
+    return out
+
+
+def _is_command_line_execution():
+    import sys
+    return ("__file__" in globals() and bool(sys.argv) and
+            Path(sys.argv[0]).resolve() == Path(__file__).resolve())
+
+
+def _parse_run_arguments():
+    import argparse
+    parser = argparse.ArgumentParser(description="PEMWE: PART 14 계산·저장 / PART 15 cache 그래프")
+    parser.add_argument("--mode", choices=("calculate", "plot", "all"), default=RUN_MODE)
+    parser.add_argument("--cache", default=None, help="불러올 results.pkl.gz; 생략하면 최신 저장 결과")
+    parser.add_argument("--date", default=DAILY_PLOT_DATE)
+    parser.add_argument("--daily-only", action="store_true")
+    parser.add_argument("--no-show", action="store_true")
+    parser.add_argument("--skip-j-sweeps", action="store_true")
+    parser.add_argument("--skip-rating-sweep", action="store_true")
+    return parser.parse_args() if _is_command_line_execution() else parser.parse_args([])
+
+
+
+def main(make_plots: bool = False, run_case1_sweep: bool = True, *,
+         catalyst_name: str | None = None, profile=None, calculate_sweeps: bool = True) -> dict:
+    global _ACTIVE_RESULT_DIR
+    if make_plots:
+        warnings.warn("main()은 계산·저장 전용입니다. 그래프는 PART 15의 plot_saved_results()를 실행하세요.")
+    if catalyst_name is not None:
+        set_catalyst(catalyst_name)
+    if SAVE_FINAL_SUMMARY_XLSX:
+        _require_summary_excel_engine()
+    profile, fixed_stack, win = setup_common(profile=profile)
+    _ACTIVE_RESULT_DIR = _create_result_directory(profile, fixed_stack)
+
+    _banner("케이스별 독립 실행 — 각 케이스를 '자기 최적 운전점'에서 돌린다")
+    out1 = run_case1(profile, fixed_stack)
+    rating_df = (stack_rating_sweep_case1(profile, base_nameplate=fixed_stack.P_nameplate)
+                 if run_case1_sweep else None)
+    out2 = run_case2(profile, fixed_stack)
+    out3 = run_case3(profile, fixed_stack)
+
+    _banner("케이스별 운전점")
+    print(pd.DataFrame([
+        {"case": "Case 1", "j*": "N/A (전력 추종)", "E_rated [kWh]": 0.0,
+         "LCOH [$/kg]": out1["lcoh"]["LCOH"]},
+        {"case": "Case 2", "j*": f"{out2['j_star']:.4f}",
+         "E_rated [kWh]": out2["E_rated"], "LCOH [$/kg]": out2["lcoh"]["LCOH"]},
+        {"case": "Case 3", "j*": f"{out3['j_star']:.4f}",
+         "E_rated [kWh]": out3["E_rated"], "LCOH [$/kg]": out3["lcoh"]["LCOH"]},
+    ]).to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
+
+    j_headline = {"Case 2": float(out2["j_star"]), "Case 3": float(out3["j_star"])}
+    ess_df = print_ess_summary(out2, out3,
+                               title="ESS 용량 최적화 결과 — 헤드라인",
+                               save_csv=False)
+
+    results = {"Case 1": out1["result"], "Case 2": out2["result"],
+               "Case 3": out3["result"]}
+    lcohs = {"Case 1": out1["lcoh"], "Case 2": out2["lcoh"], "Case 3": out3["lcoh"]}
+
+    _banner("PEM 열화 · 스택 수명  (Su et al. 2024 커널)")
+    degradation_df = print_degradation_summary(results)
+
+    life_df = print_lifecycle_summary(lcohs)
+
+    _banner("결론 비교표")
+    cmp_df = compare_table(results, lcohs)
+    print(cmp_df.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
+    best = min(lcohs, key=lambda k: lcohs[k]["LCOH"])
+    print(f"\n  >>> 최저 LCOH : {best}  ({lcohs[best]['LCOH']:.3f} USD/kg-H2)")
+
+    print("\n[손실 원장 3케이스 대조]")
+    led = pd.DataFrame({name: {k: v / r.E_paid * 100 for k, v in r.ledger.items()}
+                        for name, r in results.items()}).T
+    led.columns = [f"{bucket} [%]" for bucket in led.columns]
+    print(led.to_string(float_format=lambda x: f"{x:,.2f}"))
+
+    outs = {"Case 1": out1, "Case 2": out2, "Case 3": out3}
+    traces = {case: build_operation_trace(res, fixed_stack, win) for case, res in results.items()}
+    current_summary = print_operating_current_summary(traces, results)
+    daily_summary = None
+    try:
+        daily_summary = print_operating_current_summary(traces, results, DAILY_PLOT_DATE)
+    except DailyDateUnavailable as exc:
+        print(f"[일간 요약 생략] {exc}")
+    sweeps = (calculate_j_sweeps(profile, fixed_stack, results, outs)
+              if calculate_sweeps else {})
+
+    summary = print_final_summary(profile, fixed_stack, results, lcohs,
+                                  out1, out2, out3, sweeps)
+
+    files = export_multiyear_results(profile, results, lcohs,
+        {"Case 1": out1, "Case 2": out2, "Case 3": out3}, cmp_df, sweeps)
+    summary_excel = summary.attrs.get("excel_path")
+    if summary_excel:
+        files[Path(summary_excel).name] = summary_excel
+    out = {"catalyst": dict(fixed_stack.catalyst),
+            "catalyst_parameters": catalyst_parameter_table(), "cell_voltage_curve": cell_voltage_table(),
+            "profile": profile, "stack": fixed_stack, "window": win, "saved_files": files,
+            "summary_excel": summary_excel,
+            "case1": out1, "case2": out2, "case3": out3, "results": results,
+            "lcohs": lcohs, "compare": cmp_df, "degradation": degradation_df, "summary": summary,
+            "ess_summary": ess_df, "lifecycle_summary": life_df, "j_sweeps": sweeps,
+            "rating_sweep": rating_df,
+            "j_headline": j_headline}
+
+    settings = {k: v for k, v in globals().items() if k.isupper() and not k.startswith("_")
+                and isinstance(v, (str, bool, int, float, dict, tuple, list, type(None)))}
+    out.update(operation_traces=traces, operating_current_summary=current_summary,
+               daily_current_summary=daily_summary, diagnostic_date=DAILY_PLOT_DATE,
+               model_settings=copy.deepcopy(settings), result_directory=str(_ACTIVE_RESULT_DIR),
+               diagnostic_basis="BOL dispatch; saved sub-interval events; no daily SOC reset")
+    if SAVE_RESULT_CSV:
+        files.update(export_operation_traces(out, _ACTIVE_RESULT_DIR))
+        if daily_summary is not None:
+            files.update(export_operation_traces(out, _ACTIVE_RESULT_DIR / f"daily_{DAILY_PLOT_DATE}", DAILY_PLOT_DATE))
+    cache = save_result_cache(out)
+    files[cache.name] = str(cache)
+    print("  계산 완료. PART 15 / PEMWE_plot_only.py에서 그래프만 반복 출력할 수 있습니다.")
+    return out
+
+
+
+# %% PART 14 — 실행: 계산과 결과 저장만
+########################################################################################
+########################################################################################
+
+if __name__ == "__main__":
+    _cli_args = _parse_run_arguments()
+    pd.set_option("display.width", 220)
+    pd.set_option("display.max_columns", 50)
+    if _cli_args.mode in ("calculate", "all"):
+        _out = main(make_plots=False,
+                    run_case1_sweep=RUN_CASE1_RATING_SWEEP and not _cli_args.skip_rating_sweep,
+                    calculate_sweeps=CALCULATE_J_SWEEPS and not _cli_args.skip_j_sweeps)
+
+
+
+
+# %%
+# PART 15 — 저장 결과를 이용한 그래프 출력 
+########################################################################################
+########################################################################################
+
+_RE_KIND_EN = {"태양광": "PV", "풍력": "Wind"}
+G14_LEDGER_LABELS = {"curtail": "curtailment", "idle": "below-minimum-load loss",
+                     "rte": "ESS round-trip loss", "bop": "BOP",
+                     "stack": "stack", "storage_delta": "ESS stored-energy change"}
+
+_LCOH_ITEM_COLORS = {
+    "capex": "#264653", "fixed_OM": "#2a9d8f",
+    "stack_replacement": "#8ab17d", "battery_replacement": "#b07d62",
+    "electricity": "#e9c46a", "curtailment_penalty": "#e76f51",
+    "variable_OM": "#f4a261", "water": "#a8dadc",
+}
+
+_OPEX_ITEMS = (
+    ("electricity", "Electricity", "#e9c46a"),
+    ("water", "Water", "#a8dadc"),
+    ("fixed_OM", "Fixed O&M", "#2a9d8f"),
+    ("variable_OM", "Variable O&M", "#f4a261"),
+    ("curtailment_penalty", "Curtailment penalty", "#e76f51"),
+    ("battery_replacement", "Battery replacement", "#b07d62"),
+    ("stack_replacement", "Stack replacement", "#9467bd"),
+)
+
+_DEG_CONTRIB = (("steady", "steady", "#2a9d8f"),
+                ("ramp", "ramp", "#e9c46a"),
+                ("start", "start", "#d1495b"),
+                ("stop", "stop", "#9c6644"))
+
+
+
 def _monthly(series, timestamps, agg="sum"):
     if agg != "sum":
         raise ValueError("월별 그래프는 연도-월 합계의 연평균을 사용합니다")
@@ -2521,8 +3870,10 @@ def _monthly(series, timestamps, agg="sum"):
     return np.arange(1, 13), stats["mean"].to_numpy()
 
 
+
 def _monthly_std(series, timestamps):
     return monthly_statistics(series, timestamps)["std"].to_numpy()
+
 
 
 def _bar_top_labels(ax, x, values, fmt, fontsize=8):
@@ -2530,9 +3881,6 @@ def _bar_top_labels(ax, x, values, fmt, fontsize=8):
         ax.annotate(format(value, fmt), (xi, value), xytext=(0, 3),
                     textcoords="offset points", ha="center", va="bottom", fontsize=fontsize)
 
-
-
-_RE_KIND_EN = {"태양광": "PV", "풍력": "Wind"}
 
 
 def _profile_label(profile) -> str:
@@ -2550,8 +3898,8 @@ def _profile_label(profile) -> str:
     return f"{region} {_RE_KIND_EN.get(kind, kind)}".strip()
 
 
+
 def plot_g01_re_generation(profile, name="G01_RE_generation_monthly"):
-    """연도별 월 발전량: 상자=25~75%, 중앙선=중앙값, 수염=최소~최대"""
     if plt is None:
         return
     table = monthly_year_table(profile.P_gen * profile.dt, profile.timestamps) / 1e3
@@ -2560,7 +3908,6 @@ def plot_g01_re_generation(profile, name="G01_RE_generation_monthly"):
     if any(len(values) == 0 for values in samples):
         raise ValueError("발전량 박스플롯에는 1~12월의 연도별 월 합계가 필요합니다")
 
-    fig, ax = plt.subplots(figsize=(8.0, 4.4))
     # 스타일 설정
     BOX_WIDTH = 0.40
     CAP_WIDTH = BOX_WIDTH * 0.50
@@ -2645,7 +3992,7 @@ def plot_case_operating_hours(case: str, res, months, idx: int):
                          autopct=lambda p: f"{p:.1f}%\n({p / 100 * sum(vals):,.0f} h)",
                          pctdistance=0.72, textprops={"fontsize": 8},
                          wedgeprops={"width": 0.45, "edgecolor": "w"})
-    ax.set_title(f"Annual hour ledger (total {sum(vals):,.0f} h)")
+    ax.set_title(f"Annual hour ledger (total 8760 h)")
 
     ax = axes[1]
     x, mh = _monthly(h["on_hours"], months)
@@ -2677,52 +4024,10 @@ def plot_case_monthly_h2(case: str, res, months, idx: int):
     ax.set_xlabel("Month")
     ax.set_ylabel("H$_2$ [t]")
     ax.set_ylim(0, t.max() * 1.20 if t.max() > 0 else 1)
-    ax.set_title(f"{case} — monthly H$_2$ (BOL) "
+    ax.set_title(f"{case} — monthly H$_2$"
                  f"({_annual_mean(res, res.H2_total) / 1e3:,.2f} t/yr)")
     fig.tight_layout()
     _finish(fig, f"G{idx:02d}_{case.replace(' ', '').lower()}_monthly_H2")
-
-
-
-def lcoh_vs_j_case1(profile, fixed_stack, n: int = 25) -> pd.DataFrame:
-    j_lo, j_hi = max(2.0 * J_MIN, 0.4), 0.92 * J_LIM
-    rows = []
-    for jr in np.unique(np.r_[np.linspace(j_lo, j_hi, n), fixed_stack.j_rated]):
-        st = size_fixed_stack(fixed_stack.P_nameplate, j_rated=float(jr))
-        res = dispatch_case1(profile.P_in, st.A_tot, J_MIN, float(jr), dt=profile.dt, timestamps=profile.timestamps)
-        lc = lcoh_compare(res, st, capex_ess=0.0)
-        rows.append({"j": float(jr), "LCOH": lc["LCOH"], "H2_t": _annual_mean(res, res.H2_total) / 1e3,
-                     "curtail_%": res.E_curtail / res.E_paid * 100 if res.E_paid else np.nan})
-    return pd.DataFrame(rows)
-
-
-
-def lcoh_vs_j_case23(profile, fixed_stack, cap_hours, case, n=17, *, design=None):
-    rows = []
-    grid = np.linspace(J_MIN, J_MAX, n)
-    if design is not None:
-        grid = np.unique(np.r_[grid, design.j_star])
-    for j in grid:
-        op = c2_operating_point(float(j), fixed_stack.A_tot)
-        if design is None:
-            E = float(cap_hours) * op["P_star"]
-            prc = (c2_charge_rating if case == C2_NAME else c3_charge_rating)(profile, op["P_star"])
-            d = ESSDesign(case, float(j), E, prc, op["P_star"])
-        else:
-            if case != design.case:
-                raise ValueError("민감도 Case와 설계 Case가 다릅니다")
-            if case == C2_NAME and op["P_star"] > design.P_rated_dis + 1e-8:
-                continue
-            d = ESSDesign(case, float(j), design.E_rated, design.P_rated_chg,
-                          design.P_rated_dis, design.sizing_q)
-        out = evaluate_fixed_design(profile, fixed_stack, d)
-        r, lc = out["result"], out["lcoh"]
-        if not np.isfinite(lc["LCOH"]):
-            continue
-        rows.append(dict(j=float(j), LCOH=lc["LCOH"], H2_t=_annual_mean(r, r.H2_total)/1e3,
-                         E_rated=d.E_rated, P_rated_chg=d.P_rated_chg,
-                         P_rated_dis=d.P_rated_dis, op_hours=_annual_mean(r, r.op_hours)))
-    return pd.DataFrame(rows)
 
 
 
@@ -2753,6 +4058,7 @@ def plot_case_lcoh_vs_j(case: str, df: pd.DataFrame, j_used: float | None,
     _finish(fig, f"G{idx:02d}_{case.replace(' ', '').lower()}_LCOH_vs_j")
 
 
+
 def plot_g11_total_h2(results: dict, name="G11_compare_total_H2"):
     if plt is None:
         return
@@ -2773,7 +4079,7 @@ def plot_g11_total_h2(results: dict, name="G11_compare_total_H2"):
 
     ax.set_ylabel("Annual H$_2$ production [t/yr]")
     ax.set_ylim(0, top * 1.24 if top > 0 else 1.0)
-    ax.set_title("Annual hydrogen production (BOL)")
+    ax.set_title("Annual hydrogen production")
     ax.xaxis.grid(False)
     fig.tight_layout()
     _finish(fig, name)
@@ -2804,7 +4110,7 @@ def plot_g12_monthly_h2(results: dict, months, name="G12_compare_monthly_H2"):
     ax.set_xticks(np.arange(1, 13))
     ax.set_xlabel("Month")
     ax.set_ylabel("H$_2$ [t]")
-    ax.set_title("Monthly hydrogen production (BOL)")
+    ax.set_title("Monthly hydrogen production")
     ax.legend(fontsize=9)
     fig.tight_layout()
     _finish(fig, name)
@@ -2854,11 +4160,6 @@ def plot_g13_operating_hours(results: dict, months, name="G13_compare_operating_
     fig.tight_layout()
     _finish(fig, f"{name}_b_monthly")
 
-
-
-G14_LEDGER_LABELS = {"curtail": "curtailment", "idle": "below-minimum-load loss",
-                     "rte": "ESS round-trip loss", "bop": "BOP",
-                     "stack": "stack", "storage_delta": "ESS stored-energy change"}
 
 
 def plot_g14_lcoh_and_ledger(results: dict, lcohs: dict, name="G14_LCOH_and_ledger", part="both"):
@@ -2911,24 +4212,6 @@ def plot_g14_lcoh_and_ledger(results: dict, lcohs: dict, name="G14_LCOH_and_ledg
 
 
 
-_LCOH_ITEM_LABELS = {
-    "capex": "CAPEX",
-    "fixed_OM": "fixed O&M",
-    "stack_replacement": "stack replacement",
-    "battery_replacement": "battery replacement",
-    "electricity": "electricity",
-    "curtailment_penalty": "curtailment penalty",
-    "variable_OM": "variable O&M",
-    "water": "water",
-}
-_LCOH_ITEM_COLORS = {
-    "capex": "#264653", "fixed_OM": "#2a9d8f",
-    "stack_replacement": "#8ab17d", "battery_replacement": "#b07d62",
-    "electricity": "#e9c46a", "curtailment_penalty": "#e76f51",
-    "variable_OM": "#f4a261", "water": "#a8dadc",
-}
-
-
 def plot_g15_lcoh_breakdown(lcohs: dict, name="G15_LCOH_breakdown"):
     if plt is None:
         return
@@ -2957,40 +4240,14 @@ def plot_g15_lcoh_breakdown(lcohs: dict, name="G15_LCOH_breakdown"):
     _finish(fig, name)
 
 
-# ── 스택 열화 · 교체 lifecycle 그림 ────────────────────────────────
-
-_OPEX_ITEMS = (
-    ("electricity", "Electricity", "#e9c46a"),
-    ("water", "Water", "#a8dadc"),
-    ("fixed_OM", "Fixed O&M", "#2a9d8f"),
-    ("variable_OM", "Variable O&M", "#f4a261"),
-    ("curtailment_penalty", "Curtailment penalty", "#e76f51"),
-    ("battery_replacement", "Battery replacement", "#b07d62"),
-    ("stack_replacement", "Stack replacement", "#9467bd"),
-)
-
 
 def _lifecycle_df(case: str, lcohs: dict, results: dict, fixed_stack,
                   outs: dict | None = None):
-    """케이스별 lifecycle 테이블."""
-    lc = (lcohs or {}).get(case, {})
-    life = lc.get("lifecycle")
-    if life is not None and len(life):
-        return life
-    r = (results or {}).get(case)
-    if r is None:
-        return None
-    out = (outs or {}).get(case) or {}
-    try:
-        return lifecycle_lcoh(r, fixed_stack, float(out.get("capex_ess", 0.0)))["lifecycle"]
-    except Exception:
-        return None
+    life = (lcohs or {}).get(case, {}).get("lifecycle")
+    if life is None or not len(life):
+        raise ValueError(f"{case}: 저장된 lifecycle이 없습니다. PART 14 결과를 확인하세요.")
+    return life
 
-
-_DEG_CONTRIB = (("steady", "steady (j level)", "#2a9d8f"),
-                ("ramp", "ramp (1h reference)", "#e9c46a"),
-                ("start", "startup (extra)", "#d1495b"),
-                ("stop", "shutdown", "#9c6644"))
 
 
 def plot_g17_degradation_contrib(results: dict, name="G17_degradation_contribution"):
@@ -2999,7 +4256,7 @@ def plot_g17_degradation_contrib(results: dict, name="G17_degradation_contributi
     cases = [c for c in _CASE_ORDER if c in results]
     if not cases:
         return
-    degs = {c: ensure_degradation(results[c]) for c in cases}
+    degs = {c: results[c].meta["degradation"] for c in cases}
     x = np.arange(len(cases))
 
     fig, ax = plt.subplots(figsize=(7.4, 5.0))
@@ -3084,29 +4341,12 @@ def plot_case_lifecycle(case: str, life, idx: int, lc: dict | None = None):
     _finish(fig, f"G{idx:02d}_{case.replace(' ', '').lower()}_lifecycle")
 
 
-def _remove_obsolete_figures():
-    """이전 버전에서 삭제·이름 변경된 그림만 정리합니다."""
-    directory = _ensure_fig_dir()
-    if directory is None:
-        return
-    obsolete = (
-        "G10_compare_mean_annual_H2.png", "G11_mean_annual_energy_pathway.png",
-        "G13_stack_replacement.png", "G14_LCOH_comparison.png",
-        "G15_LCOH_breakdown.png", "G16_case1_lifecycle.png",
-        "G17_case2_lifecycle.png", "G18_case3_lifecycle.png",
-        "G19_case1_LCOH_vs_j.png", "G20_case2_LCOH_vs_j.png",
-        "G21_case3_LCOH_vs_j.png",
-    )
-    for filename in obsolete:
-        (Path(directory) / filename).unlink(missing_ok=True)
 
-
-def make_all_figures(profile, results, lcohs, fixed_stack, out1, out2, out3, verbose=True):
+def make_all_figures(profile, results, lcohs, fixed_stack, out1, out2, out3, verbose=True, sweeps=None):
     if plt is None:
         return {}
     setup_plots()
     _FIGURE_MANIFEST.clear()
-    _remove_obsolete_figures()
     ts = profile.timestamps
     outs = {"Case 1": out1, "Case 2": out2, "Case 3": out3}
     plot_g01_re_generation(profile, "G01_RE_generation_monthly")
@@ -3127,598 +4367,25 @@ def make_all_figures(profile, results, lcohs, fixed_stack, out1, out2, out3, ver
         if case in results:
             plot_case_lifecycle(case, _lifecycle_df(case, lcohs, results, fixed_stack, outs),
                                 15 + i, lcohs.get(case))
-    sweeps = {}
-    if verbose:
-        print("  LCOH 민감도 계산 (G18~G20)")
-    if "Case 1" in results:
-        df = lcoh_vs_j_case1(profile, fixed_stack)
-        sweeps["Case 1"] = df
-        plot_case_lcoh_vs_j("Case 1", df, J_MAX, lcohs["Case 1"]["LCOH"], 18,
-                            "Rated current density [A/cm$^2$] (stack resized)")
-    for i, case in enumerate(("Case 2", "Case 3")):
-        if case not in results:
+    sweeps = sweeps or {}
+    for i, case in enumerate(_CASE_ORDER):
+        df = sweeps.get(case)
+        if df is None or not len(df):
+            if verbose and case in results:
+                print(f"  [G{18+i} 생략] {case}의 저장된 LCOH-j 민감도 표가 없습니다.")
             continue
-        out = outs[case]
-        df = lcoh_vs_j_case23(profile, fixed_stack, out["cap_hours"], case, design=out["design"])
-        sweeps[case] = df
-        plot_case_lcoh_vs_j(case, df, out["j_star"], lcohs[case]["LCOH"], 19 + i,
-                            "Operating current density [A/cm$^2$] (PEM and ESS fixed)")
+        if case == C1_NAME:
+            j_used = fixed_stack.j_rated
+            xlabel = "Rated current density [A/cm²] (stack resized)"
+        else:
+            j_used = results[case].j_star
+            xlabel = "Operating current density [A/cm²] (PEM and ESS fixed)"
+        plot_case_lcoh_vs_j(case, df, j_used, lcohs[case]["LCOH"], 18+i, xlabel)
     return sweeps
 
 
 
-def _ess_sizing_key(out: dict | None) -> str:
-    if not out:
-        return "-"
-    df = out.get("cap_sweep")
-    if isinstance(df, pd.DataFrame) and len(df):
-        k = int(df["LCOH_internal"].idxmin())
-        return f"q = {df.loc[k, 'q [%]']:g} % (일별 잉여 분위수)"
-    design = out.get("design")
-    if design is not None and design.sizing_q is not None:
-        return f"q = {design.sizing_q:g} % (다년 일별 잉여 분위수)"
-    return "고정 설비 평가"
-
-
-def ess_summary_table(out2: dict | None, out3: dict | None) -> pd.DataFrame:
-    rows = [{"case": "Case 1",
-             "ESS 용량 E_rated [kWh]": 0.0,
-             "ESS 용량 [MWh]": 0.0,
-             "등가 저장시간 [h of P*]": 0.0,
-             "ESS 출력 P_rated [kW]": 0.0,
-             "ESS CAPEX [USD]": 0.0,
-             "등가 사이클 [cyc/yr]": 0.0,
-             "운전 j* [A/cm2]": float("nan"),
-             "사이징 근거": "ESS 없음 (직결)"}]
-
-    for case, out in (("Case 2", out2), ("Case 3", out3)):
-        if not out:
-            continue
-        r = out.get("result")
-        E = float(out.get("E_rated", getattr(r, "E_rated", 0.0)) or 0.0)
-        P_star = float((out.get("op") or {}).get("P_star", 0.0) or 0.0)
-        if P_star <= 0:
-            P_star = float(getattr(r, "P_star", 0.0) or 0.0)
-        P_rated = max(float(getattr(r, "P_rated_chg", 0.0) or 0.0),
-                      float(getattr(r, "P_rated_dis", 0.0) or 0.0))
-        rows.append({
-            "case": case,
-            "ESS 용량 E_rated [kWh]": E,
-            "ESS 용량 [MWh]": E / 1e3,
-            "등가 저장시간 [h of P*]": E / P_star if P_star > 0 else float("nan"),
-            "ESS 출력 P_rated [kW]": P_rated,
-            "ESS CAPEX [USD]": float(out.get("capex_ess", 0.0) or 0.0),
-            "등가 사이클 [cyc/yr]": _annual_mean(r, float(getattr(r, "eq_cycles", 0.0) or 0.0)),
-            "운전 j* [A/cm2]": float(out.get("j_star", float("nan"))),
-            "사이징 근거": _ess_sizing_key(out),
-        })
-    return pd.DataFrame(rows).set_index("case")
-
-
-def print_ess_summary(out2: dict | None, out3: dict | None,
-                      title: str = "ESS 용량 최적화 결과 (E_rated*)",
-                      save_csv: bool | str = False) -> pd.DataFrame:
-    df = ess_summary_table(out2, out3)
-    _banner(title, "-")
-    print(f"  mode=surplus_q, c_E={C_E_USD_KWH} $/kWh, "
-          f"c_P={C_P_USD_KW} $/kW, RTE={ETA_RTE:.2f}")
-    cols = ["ESS 용량 E_rated [kWh]", "ESS 출력 P_rated [kW]",
-            "ESS CAPEX [USD]", "등가 사이클 [cyc/yr]", "운전 j* [A/cm2]", "사이징 근거"]
-    print(df[cols].to_string(float_format=lambda x: f"{x:,.2f}"))
-    e2 = df.loc["Case 2", "ESS 용량 E_rated [kWh]"] if "Case 2" in df.index else np.nan
-    e3 = df.loc["Case 3", "ESS 용량 E_rated [kWh]"] if "Case 3" in df.index else np.nan
-    if np.isfinite(e2) and np.isfinite(e3) and e2 > 0:
-        print(f"  Case3/Case2 E_rated={e3 / e2 * 100:,.1f} % "
-              f"(reduction={100 - e3 / e2 * 100:,.1f} %)")
-    if save_csv:
-        try:
-            if isinstance(save_csv, str):
-                path = save_csv
-            else:
-                d = _ensure_fig_dir()
-                path = f"{d}/ESS_sizing_summary.csv" if d else "ESS_sizing_summary.csv"
-            df.to_csv(path, encoding="utf-8-sig")
-            print(f"  saved: {path}")
-        except Exception as e:
-            print(f"  [WARN] ESS summary CSV save failed: {e}")
-    return df
-
-
-def lifecycle_summary_table(lcohs: dict) -> pd.DataFrame:
-    rows = []
-    for case in _CASE_ORDER:
-        lc = (lcohs or {}).get(case)
-        if not lc:
-            continue
-        life = lc.get("lifecycle")
-        rows.append({
-            "case": case,
-            "LCOH [$/kg]": lc.get("LCOH", np.nan),
-            "BOL 연평균 H2 [t]": lc.get("annual_H2", np.nan) / 1e3,
-            "생애 H2 합계 [t]": lc.get("H2_total_life_kg", np.nan) / 1e3,
-            "생애 평균 H2 [t/yr]": lc.get("annual_H2_mean", np.nan) / 1e3,
-            "최종연도 열화손실 [%]": lc.get("H2_fade_pct", np.nan),
-            "스택 교체 [회]": lc.get("replacement_count", np.nan),
-            "평균 유지율 [%]": lc.get("retention_mean_pct", np.nan),
-            "효율 yr1 [%HHV]": (float(life["eff_HHV_pct"].iloc[0])
-                               if life is not None and len(life) else np.nan),
-            "효율 최종 [%HHV]": (float(life["eff_HHV_pct"].iloc[-1])
-                                if life is not None and len(life) else np.nan),
-            "교체비 현재가치 [k$]": lc.get("items_usd", {}).get("stack_replacement", np.nan) / 1e3,
-        })
-    return pd.DataFrame(rows).set_index("case") if rows else pd.DataFrame()
-
-
-def print_lifecycle_summary(lcohs: dict, title: str = "스택 열화 · 교체 lifecycle 결과") -> pd.DataFrame:
-    df = lifecycle_summary_table(lcohs)
-    _banner(title, "-")
-    if not len(df):
-        print("  (lifecycle 결과 없음)")
-        return df
-    print(f"  kernel=Su et al. 2024 (anchored), applies_to=stack, "
-          f"앵커={STACK_LIFETIME_H:,.0f} h @ EOL 유지율 {STACK_EOL_RETENTION * 100:.0f} % "
-          f"({deg_anchor_rate_uV_h():.2f} uV/h @ j={DEG_J_REF:.2f}), "
-          f"프로젝트={LIFETIME_YR} yr, 교체 정지={REPLACEMENT_DOWNTIME_H:,.0f} h/회")
-    print(df.to_string(float_format=lambda x: f"{x:,.2f}"))
-    return df
-
-
-
-def _require_summary_excel_engine() -> None:
-    try:
-        import openpyxl  # noqa: F401
-    except ImportError as exc:
-        raise ImportError(
-            "최종 요약 Excel 저장에는 openpyxl이 필요합니다. "
-            "실행 환경에서 'python -m pip install openpyxl'을 실행하세요. "
-            "Excel 저장을 끄려면 SAVE_FINAL_SUMMARY_XLSX = False로 설정하세요."
-        ) from exc
-
-
-def _summary_filename_part(value, fallback: str) -> str:
-    import re
-    name = _normalize_re_name(value)
-    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
-    name = re.sub(r"\s+", "_", name).strip(" ._")
-    # UTF-8 파일명 길이도 고려해 지역/발전원 각각 최대 40자로 제한합니다.
-    return name[:40] or fallback
-
-
-def _save_new_summary_file(directory: Path, stem: str, content: bytes) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
-    number = 0
-    while True:
-        suffix = "" if number == 0 else f"_{number:03d}"
-        path = directory / f"{stem}{suffix}.xlsx"
-        try:
-            stream = path.open("xb")
-        except FileExistsError:
-            number += 1
-            continue
-        try:
-            with stream:
-                stream.write(content)
-        except BaseException:
-            # 이번 호출이 새로 만든 불완전 파일만 제거합니다. 이전 파일은 건드리지 않음.
-            path.unlink(missing_ok=True)
-            raise
-        return path
-
-
-def export_final_summary_excel(profile, fixed_stack, metrics: pd.DataFrame,
-                               lcoh_items: pd.DataFrame,
-                               winner: tuple, best_h2: tuple) -> Path:
-    from datetime import datetime
-    from io import BytesIO
-
-    _require_summary_excel_engine()
-    from openpyxl.styles import Alignment, Border, Font, PatternFill
-    from openpyxl.utils import get_column_letter
-
-    kind = _normalize_re_name(profile.meta.get("kind") or RE_KIND)
-    region = _normalize_re_name(profile.region or RE_REGION_NAME)
-    if region.endswith(" " + kind):
-        region = region[:-(len(kind) + 1)].strip()
-    if not region or region == "(unset)":
-        region = _normalize_re_name(RE_REGION_NAME)
-    stem = (f"{_summary_filename_part(region, 'region')}_"
-            f"{_summary_filename_part(kind, 'renewable')}")
-
-    directory = Path(FINAL_SUMMARY_DIR).expanduser()
-    if not directory.is_absolute():
-        base = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
-        directory = base / directory
-
-    config_rows = [
-        ("저장 시각", datetime.now().astimezone().isoformat(timespec="seconds"), "실행 환경 현지시각 / UTC offset 포함"),
-        ("지역", region, "실제 입력 프로파일"),
-        ("재생에너지 종류", kind, "실제 입력 프로파일"),
-        ("입력 표시명", profile.region, "input"),
-        ("분석 기간", profile.period_label, "관측연도"),
-        ("분석 연수", profile.n_years, "yr"),
-        ("입력 출처", profile.source, "source"),
-        ("재생에너지 용량", profile.meta.get("re_capacity_MW", np.nan), "MW; 미지정은 빈칸"),
-        ("연평균 배정 전력량", profile.E_paid / profile.n_years / 1e3, "MWh/yr"),
-        ("이용률 CF", profile.meta.get("unit_CF", np.nan) * 100, "% ; 최종 요약과 동일 기준"),
-        ("배정 비율", profile.allocation_n * 100, "%"),
-        ("시간 간격", profile.dt, "h"),
-        ("PEM 명판 용량", fixed_stack.P_nameplate / 1000, "MW"),
-        ("전류밀도 하한 J_MIN", J_MIN, "A/cm2"),
-        ("전류밀도 상한 J_MAX", J_MAX, "A/cm2"),
-        ("전기 단가 ELEC_PRICE", ELEC_PRICE, "$/kWh"),
-        ("LCOH 기준", "lifecycle", "최종 요약 기준"),
-        ("열화 모델", "Su2024/anchored", "stack"),
-        ("EOL 유지율", STACK_EOL_RETENTION * 100, "%"),
-        ("스택 수명 앵커", STACK_LIFETIME_H, "h"),
-        ("스택 교체비 비율", REPL_STACK_FRAC * 100, "% of capex_stack"),
-        ("프로젝트 기간", LIFETIME_YR, "yr"),
-        ("할인율", INTEREST_RATE * 100, "%"),
-        ("전류밀도 설정 모드", J_STAR_MODE, "J_STAR_MODE"),
-        ("빠른 계산 모드", FAST_MODE, "FAST_MODE"),
-        ("저장 제외 범위", "별도 ESS sizing 표", "case metrics의 ESS 지표는 유지"),
-        ("빈칸 의미", "해당 없음 / 미계산 / 미지정", "원래 NaN인 셀은 0으로 바꾸지 않음"),
-    ]
-    config = pd.DataFrame(config_rows, columns=["항목", "값", "단위 / 설명"])
-    conclusions = pd.DataFrame([
-        {"항목": "LCOH 최저", "case": winner[0], "값": winner[1], "단위": "$/kg"},
-        {"항목": "생산량 최대", "case": best_h2[0], "값": best_h2[1] / 1e3, "단위": "t/yr (BOL)"},
-    ])
-
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        config.to_excel(writer, sheet_name="설정값", index=False)
-        metrics.to_excel(writer, sheet_name="case_metrics", index=True, index_label="항목")
-        lcoh_items.to_excel(writer, sheet_name="LCOH_breakdown", index=True, index_label="항목 [$/kg]")
-        conclusions.to_excel(writer, sheet_name="결론", index=False)
-
-        header_fill = PatternFill("solid", fgColor="17365D")
-        total_fill = PatternFill("solid", fgColor="E2EFDA")
-        for sheet in writer.sheets.values():
-            sheet.sheet_view.showGridLines = False
-            sheet.freeze_panes = "B2" if sheet.title in ("case_metrics", "LCOH_breakdown") else "A2"
-            sheet.auto_filter.ref = sheet.dimensions
-            sheet.row_dimensions[1].height = 26
-            for row in sheet.iter_rows():
-                for cell in row:
-                    cell.font = Font(name="Calibri", size=11)
-                    cell.border = Border()
-                    cell.alignment = Alignment(vertical="center", wrap_text=True)
-                    if cell.data_type == "f":
-                        cell.data_type = "s" 
-                    if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
-                        cell.number_format = ("#,##0.0000" if sheet.title in ("설정값", "LCOH_breakdown")
-                                              else "#,##0.000" if sheet.title == "결론" else "#,##0.00")
-                if row[0].row > 1:
-                    sheet.row_dimensions[row[0].row].height = 30 if sheet.title == "설정값" else 24
-            for cell in sheet[1]:
-                cell.fill = header_fill
-                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            widths = ([38, 46, 52] if sheet.title == "설정값" else
-                      [24, 18, 22, 22] if sheet.title == "결론" else
-                      [44] + [20] * (sheet.max_column - 1))
-            for i, width in enumerate(widths, start=1):
-                sheet.column_dimensions[get_column_letter(i)].width = width
-            if sheet.title == "LCOH_breakdown":
-                for cell in sheet[sheet.max_row]:
-                    cell.fill = total_fill
-                    cell.font = Font(name="Calibri", size=11, bold=True)
-
-    return _save_new_summary_file(directory, stem, buffer.getvalue())
-
-
-def print_final_summary(profile, fixed_stack, results: dict, lcohs: dict,
-                        out1: dict, out2: dict, out3: dict, sweeps: dict | None = None):
-    _banner("최종 요약")
-    cap_mw = profile.meta.get("re_capacity_MW", np.nan)
-    cf_txt = (f", CF={profile.meta['unit_CF'] * 100:,.2f} %"
-              if "unit_CF" in profile.meta else "")
-    print(f"  input={profile.region} {profile.period_label}, "
-          f"RE={cap_mw:,.2f} MW" if np.isfinite(cap_mw) else
-          f"  input={profile.region} {profile.period_label}, RE=(unspecified)")
-    print(f"  mean annual E_paid={profile.E_paid / profile.n_years / 1e3:,.1f} MWh{cf_txt}, "
-          f"PEM={fixed_stack.P_nameplate / 1000:,.3f} MW, "
-          f"j_window={J_MIN:.3f}-{J_MAX:.2f} A/cm2, "
-          f"elec={ELEC_PRICE:,.4f} $/kWh")
-    print(f"  LCOH 기준=lifecycle | 열화=Su2024/anchored"
-          f"(EOL {STACK_EOL_RETENTION * 100:.0f} % @ {STACK_LIFETIME_H:,.0f} h), "
-          f"교체비={REPL_STACK_FRAC * 100:.0f} % of capex_stack")
-
-    rows = []
-    for case, out in [("Case 1", out1), ("Case 2", out2), ("Case 3", out3)]:
-        if case not in results:
-            continue
-        r = results[case]
-        h = _production_hours(r, r.dt or 1.0)
-        lc = lcohs[case]
-        j_star = out.get("j_star")
-        sw = (sweeps or {}).get(case)
-        j_opt = float(sw.loc[sw["LCOH"].idxmin(), "j"]) if sw is not None and len(sw) else np.nan
-        rows.append({
-            "case": case,
-            "연평균 생산시간 [h/yr]": _annual_mean(r, h["producing"]),
-            "연평균 정지(발전有) [h/yr]": _annual_mean(r, h["idle_with_gen"]),
-            "연평균 H2 [t] (BOL)": _annual_mean(r, r.H2_total) / 1e3,
-            "생애 H2 [t]": lc.get("H2_total_life_kg", np.nan) / 1e3,
-            "스택 교체 [회]": lc.get("replacement_count", np.nan),
-            "평균 생산율 [kg/h]": r.H2_total / h["producing"] if h["producing"] else np.nan,
-            "운전 j* [A/cm2]": j_star if j_star is not None else np.nan,
-            "민감도 최소 j [A/cm2]": j_opt,
-            "ESS 용량 [kWh]": r.E_rated,
-            "ESS 출력 [kW]": max(r.P_rated_chg, r.P_rated_dis),
-            "ESS CAPEX [k$]": lc["capex_ess"] / 1e3,
-            "SEC_eff [kWh/kg]": r.SEC_eff(),
-            "curtail [%]": r.E_curtail / max(r.E_paid, 1e-9) * 100,
-            "LCOH [$/kg]": lc["LCOH"],
-        })
-    df = pd.DataFrame(rows).set_index("case").T
-    print("\n[case metrics]")
-    print(df.to_string(float_format=lambda x: f"{x:,.2f}"))
-
-    items = pd.DataFrame({case: lcohs[case]["items_usd_per_kg"] for case in results}).round(4)
-    items.index = [_LCOH_ITEM_LABELS.get(i, i) for i in items.index]
-    items.loc["TOTAL"] = [lcohs[case]["LCOH"] for case in results]
-    print(f"\n[LCOH breakdown, $/kg]  (기준: lifecycle)")
-    print(items.to_string(float_format=lambda x: f"{x:,.3f}"))
-
-    ess = ess_summary_table(out2, out3)
-    ecols = ["ESS 용량 E_rated [kWh]", "ESS 출력 P_rated [kW]",
-             "ESS CAPEX [USD]", "등가 사이클 [cyc/yr]", "사이징 근거"]
-    print(f"\n[ESS sizing] mode=surplus_q")
-    print(ess[ecols].to_string(float_format=lambda x: f"{x:,.2f}"))
-
-    win = min(((case, lcohs[case]["LCOH"]) for case in results), key=lambda kv: kv[1])
-    best_h2 = max(((case, _annual_mean(results[case], results[case].H2_total)) for case in results), key=lambda kv: kv[1])
-    print(f"\n[결론] LCOH 최저={win[0]} ({win[1]:,.3f} $/kg), "
-          f"생산량 최대={best_h2[0]} ({best_h2[1] / 1e3:,.2f} t/yr)")
-
-    df.attrs["excel_path"] = None
-    if SAVE_FINAL_SUMMARY_XLSX:
-        excel_path = export_final_summary_excel(profile, fixed_stack, df, items, win, best_h2)
-        df.attrs["excel_path"] = str(excel_path)
-        print(f"\n[최종 요약 Excel 저장] {excel_path}")
-    return df
-
-
-def _banner(title: str, ch: str = "=") -> None:
-    print("\n" + ch * 78)
-    print(f" {title}")
-    print(ch * 78)
-
-
-def echo_config(profile, fixed_stack, win) -> None:
-    _banner("공유 파라미터 요약 (PART 1)", "-")
-    print(f"  catalyst=IrO2, T={T_OPER - 273.15:.0f} C, "
-          f"membrane={MEMB_T_UM:.0f} um, BOP={BOP_EFFICIENCY:.2f} kWh/kg")
-    print(f"  stack={fixed_stack.P_nameplate:,.1f} kW, "
-          f"A_tot={fixed_stack.A_tot:,.0f} cm2, j={J_MIN:.4f}-{J_MAX:.2f} A/cm2, "
-          f"P={win.P_min:,.0f}-{win.P_max:,.0f} kW")
-    print(f"  RE={profile.region} {profile.period_label}, mean annual E_paid={profile.E_paid / profile.n_years / 1e3:,.1f} MWh, "
-          f"n={profile.allocation_n * 100:.0f} %, elec={ELEC_PRICE} $/kWh, "
-          f"ESS(c_E/c_P/RTE)={C_E_USD_KWH}/{C_P_USD_KW}/{ETA_RTE:.2f}")
-    print(f"  LCOH=lifecycle, 열화=Su2024/anchored/stack "
-          f"(EOL {STACK_EOL_RETENTION * 100:.0f} % @ {STACK_LIFETIME_H:,.0f} h), "
-          f"프로젝트={LIFETIME_YR} yr, i={INTEREST_RATE * 100:.1f} %")
-
-
-def setup_common(verbose: bool = True):
-    global _OUTPUT_RUN_TAG
-    profile = get_profile()
-    _OUTPUT_RUN_TAG = f"{profile.region.replace(' ', '_')}_{profile.years[0]}_{profile.years[-1]}"
-    if verbose:
-        _banner("공통 셋업")
-        profile.report()
-    fixed_stack = build_fixed_stack(profile, verbose=verbose)
-    win = operating_window(fixed_stack.A_tot)
-    if verbose:
-        echo_config(profile, fixed_stack, win)
-    return profile, fixed_stack, win
-
-
-
-def export_multiyear_results(profile, results, lcohs, outs, comparison=None, sweeps=None):
-    directory = _ensure_fig_dir()
-    if directory is None or not SAVE_RESULT_CSV:
-        return {}
-    d = Path(directory)
-    saved = {}
-
-    def save(name, table, index=True):
-        path = d / name
-        table.to_csv(path, index=index, encoding="utf-8-sig")
-        saved[name] = str(path)
-
-    for case, r in results.items():
-        key = case.replace(" ", "").lower()
-        annual = annual_result_table(r)
-        save(f"{key}_annual_BOL.csv", annual)
-        save(f"{key}_monthly_H2_by_year.csv", monthly_year_table(r.H2_series, profile.timestamps))
-        save(f"{key}_monthly_H2_statistics.csv", monthly_statistics(r.H2_series, profile.timestamps))
-        save(f"{key}_monthly_hours_by_year.csv", monthly_year_table(r.on_hours, profile.timestamps))
-        save(f"{key}_monthly_hours_statistics.csv", monthly_statistics(r.on_hours, profile.timestamps))
-        save(f"{key}_lifecycle.csv", lcohs[case]["lifecycle"], index=False)
-        hourly = pd.DataFrame({"timestamp": profile.timestamps, "P_in_kW": r.P_in,
-                               "j_A_cm2": r.j, "P_used_kW": r.P_used,
-                               "H2_kg": r.H2_series, "producing_hours": r.on_hours})
-        if r.soc is not None:
-            hourly["SOC"] = r.soc
-        save(f"{key}_hourly_BOL.csv", hourly, index=False)
-        opt = outs[case].get("opt")
-        if opt is not None and isinstance(opt.get("records"), pd.DataFrame):
-            save(f"{key}_design_search.csv", opt["records"], index=False)
-        if sweeps and case in sweeps:
-            save(f"{key}_LCOH_vs_j.csv", sweeps[case], index=False)
-    generation = profile.P_gen * profile.dt
-    save("RE_annual_generation_kWh.csv", monthly_year_table(generation, profile.timestamps).sum(axis=1).to_frame("generation_kWh"))
-    save("RE_monthly_generation_by_year_kWh.csv", monthly_year_table(generation, profile.timestamps))
-    save("RE_monthly_generation_statistics_kWh.csv", monthly_statistics(generation, profile.timestamps))
-    save("input_quality.csv", pd.DataFrame(profile.meta.get("quality", [])), index=False)
-    save("comparison.csv", comparison if comparison is not None else compare_table(results, lcohs), index=False)
-    if _FIGURE_MANIFEST:
-        save("figure_order.csv", pd.DataFrame(_FIGURE_MANIFEST), index=False)
-    import json
-    manifest = dict(region=profile.region, source_years=list(profile.years),
-        project_years=LIFETIME_YR, project_source_years=lcohs[next(iter(lcohs))]["lifecycle"].source_year.astype(int).tolist(),
-        annual_statistics="calendar-year means; sample SD ddof=1", monthly_basis="BOL; no degradation derating",
-        lifecycle_basis="repeat source-year BOL totals; annual-rate post-processing; not degradation-coupled hourly dispatch",
-        warm_start_days=WARM_START_DAYS, warm_start_scope="once before full observed sequence; excluded",
-        initial_storage={c: r.E_start for c, r in results.items()},
-        final_storage={c: r.E_end for c, r in results.items()},
-        source_paths=[str(Path(p).relative_to(Path(__file__).resolve().parent))
-                      if Path(p).is_relative_to(Path(__file__).resolve().parent) else str(p)
-                      for p in profile.meta.get("paths", [])], dt_hours=profile.dt,
-        input_validation=dict(missing_policy=RE_MISSING_POLICY,
-            low_cf_policy=RE_LOW_CF_POLICY, min_annual_cf=RE_MIN_ANNUAL_CF,
-            low_cf_years=profile.meta.get("low_cf_years", []),
-            zero_generation_years=profile.meta.get("zero_generation_years", [])),
-        physical_parameters=dict(T_OPER=T_OPER, J_MIN=J_MIN, J_MAX=J_MAX,
-            STACK_NAMEPLATE_KW=STACK_NAMEPLATE_KW, RE_CAPACITY_MW=RE_CAPACITY_MW,
-            ALLOCATION_N=ALLOCATION_N, CASE2=CASE2, CASE3=CASE3),
-        economic_parameters=dict(ELEC_PRICE=ELEC_PRICE, INTEREST_RATE=INTEREST_RATE,
-            C_E_USD_KWH=C_E_USD_KWH, C_P_USD_KW=C_P_USD_KW),
-        designs={c: dict(j_star=r.j_star, E_rated=r.E_rated, P_rated_chg=r.P_rated_chg,
-                        P_rated_dis=r.P_rated_dis) for c, r in results.items()})
-    path = d / "run_config.json"
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    saved[path.name] = str(path)
-    return saved
-
-
-def main(make_plots: bool = True, run_case1_sweep: bool = True) -> dict:
-    if SAVE_FINAL_SUMMARY_XLSX:
-        _require_summary_excel_engine()
-    profile, fixed_stack, win = setup_common()
-
-    _banner("케이스별 독립 실행 — 각 케이스를 '자기 최적 운전점'에서 돌린다")
-    out1 = run_case1(profile, fixed_stack)
-    rating_df = (stack_rating_sweep_case1(profile, base_nameplate=fixed_stack.P_nameplate)
-                 if run_case1_sweep else None)
-    out2 = run_case2(profile, fixed_stack)
-    out3 = run_case3(profile, fixed_stack)
-
-    _banner("케이스별 운전점")
-    print(pd.DataFrame([
-        {"case": "Case 1", "j*": "N/A (전력 추종)", "E_rated [kWh]": 0.0,
-         "LCOH [$/kg]": out1["lcoh"]["LCOH"]},
-        {"case": "Case 2", "j*": f"{out2['j_star']:.4f}",
-         "E_rated [kWh]": out2["E_rated"], "LCOH [$/kg]": out2["lcoh"]["LCOH"]},
-        {"case": "Case 3", "j*": f"{out3['j_star']:.4f}",
-         "E_rated [kWh]": out3["E_rated"], "LCOH [$/kg]": out3["lcoh"]["LCOH"]},
-    ]).to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-
-    j_headline = {"Case 2": float(out2["j_star"]), "Case 3": float(out3["j_star"])}
-    ess_df = print_ess_summary(out2, out3,
-                               title="ESS 용량 최적화 결과 — 헤드라인",
-                               save_csv=True)
-
-    results = {"Case 1": out1["result"], "Case 2": out2["result"],
-               "Case 3": out3["result"]}
-    lcohs = {"Case 1": out1["lcoh"], "Case 2": out2["lcoh"], "Case 3": out3["lcoh"]}
-
-    _banner("PEM 열화 · 스택 수명  (Su et al. 2024 커널)")
-    degradation_df = print_degradation_summary(results)
-
-    life_df = print_lifecycle_summary(lcohs)
-
-    _banner("결론 비교표")
-    cmp_df = compare_table(results, lcohs)
-    print(cmp_df.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-    best = min(lcohs, key=lambda k: lcohs[k]["LCOH"])
-    print(f"\n  >>> 최저 LCOH : {best}  ({lcohs[best]['LCOH']:.3f} USD/kg-H2)")
-
-    print("\n[손실 원장 3케이스 대조]")
-    led = pd.DataFrame({name: {k: v / r.E_paid * 100 for k, v in r.ledger.items()}
-                        for name, r in results.items()}).T
-    led.columns = [f"{bucket} [%]" for bucket in led.columns]
-    print(led.to_string(float_format=lambda x: f"{x:,.2f}"))
-
-    sweeps = {}
-    if make_plots and plt is not None:
-        _banner("그래프 생성 (G01 ~ G20)")
-        sweeps = make_all_figures(profile, results, lcohs, fixed_stack,
-                                  out1, out2, out3)
-        print(f"  figures: {_ensure_fig_dir() or '(저장 안 함)'}")
-
-    summary = print_final_summary(profile, fixed_stack, results, lcohs,
-                                  out1, out2, out3, sweeps)
-
-    files = export_multiyear_results(profile, results, lcohs,
-        {"Case 1": out1, "Case 2": out2, "Case 3": out3}, cmp_df, sweeps)
-    summary_excel = summary.attrs.get("excel_path")
-    if summary_excel:
-        files[Path(summary_excel).name] = summary_excel
-    return {"profile": profile, "stack": fixed_stack, "window": win, "saved_files": files,
-            "summary_excel": summary_excel,
-            "case1": out1, "case2": out2, "case3": out3, "results": results,
-            "lcohs": lcohs, "compare": cmp_df, "degradation": degradation_df, "summary": summary,
-            "ess_summary": ess_df, "lifecycle_summary": life_df, "j_sweeps": sweeps,
-            "rating_sweep": rating_df,
-            "j_headline": j_headline}
-
-
-def sensitivity_stack_fraction(fractions=(0.25, 0.4, 0.55, 0.7, 1.0),
-                               verbose: bool = True) -> pd.DataFrame:
-    global STACK_PV_FRACTION
-    profile = get_profile()
-    backup, rows = STACK_PV_FRACTION, []
-    try:
-        for f in fractions:
-            STACK_PV_FRACTION = f
-            st = build_fixed_stack(profile, verbose=False)
-            o1 = run_case1(profile, st, verbose=False)
-            o2 = run_case2(profile, st, verbose=False)
-            o3 = run_case3(profile, st, verbose=False)
-            lc = {"C1": o1["lcoh"]["LCOH"], "C2": o2["lcoh"]["LCOH"],
-                  "C3": o3["lcoh"]["LCOH"]}
-            rows.append({"PV fraction": f, "nameplate [kW]": st.P_nameplate,
-                         "C1 curtail [%]": o1["result"].E_curtail / o1["result"].E_paid * 100,
-                         "C1 H2 [t]": _annual_mean(o1["result"], o1["result"].H2_total) / 1e3,
-                         "C2 H2 [t]": _annual_mean(o2["result"], o2["result"].H2_total) / 1e3,
-                         "C3 H2 [t]": _annual_mean(o3["result"], o3["result"].H2_total) / 1e3,
-                         "C1 LCOH": lc["C1"], "C2 LCOH": lc["C2"], "C3 LCOH": lc["C3"],
-                         "winner": min(lc.items(), key=lambda kv: kv[1])[0]})
-            if verbose:
-                print(f"  fraction {f:.2f}: nameplate {st.P_nameplate:,.0f} kW done")
-    finally:
-        STACK_PV_FRACTION = backup
-    df = pd.DataFrame(rows)
-    if verbose:
-        _banner("민감도 — 스택 규모 vs 재생 규모")
-        print(df.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-    return df
-
-
-def sensitivity_stack_lifetime(lifetimes=(20_000, 40_000, 60_000, 80_000, 100_000),
-                               case: str = "Case 3", verbose: bool = True) -> pd.DataFrame:
-    global STACK_LIFETIME_H
-    profile, fixed_stack, _ = setup_common(verbose=False)
-    backup, rows = STACK_LIFETIME_H, []
-    runner = {"Case 1": run_case1, "Case 2": run_case2, "Case 3": run_case3}[case]
-    try:
-        for life_h in lifetimes:
-            STACK_LIFETIME_H = float(life_h)
-            out = runner(profile, fixed_stack, verbose=False)
-            lc = out["lcoh"]
-            rows.append({
-                "stack lifetime [h]": life_h,
-                "앵커 uV/h": deg_anchor_rate_uV_h(),
-                "유효 uV/h": lc.get("degradation", {}).get("rate_eff_uV_h", np.nan),
-                "실효 수명 [h]": lc.get("stack_life_hours", np.nan),
-                "교체 [회]": lc.get("replacement_count", np.nan),
-                "생애 H2 [t]": lc.get("H2_total_life_kg", np.nan) / 1e3,
-                "평균 유지율 [%]": lc.get("retention_mean_pct", np.nan),
-                "교체비 [$/kg]": lc["items_usd_per_kg"].get("stack_replacement", np.nan),
-                "LCOH [$/kg]": lc["LCOH"],
-            })
-            if verbose:
-                print(f"  lifetime {life_h:,.0f} h -> LCOH {lc['LCOH']:.3f} $/kg, "
-                      f"교체 {lc.get('replacement_count', 0)}회")
-    finally:
-        STACK_LIFETIME_H = backup
-    df = pd.DataFrame(rows)
-    if verbose:
-        _banner(f"민감도 — 스택 수명 ({case})")
-        print(df.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
+def plot_stack_lifetime_sensitivity(df, case="Case 3"):
     if plt is not None and len(df):
         setup_plots()
         fig, ax = plt.subplots(figsize=(8.0, 4.4))
@@ -3737,9 +4404,262 @@ def sensitivity_stack_lifetime(lifetimes=(20_000, 40_000, 60_000, 80_000, 100_00
     return df
 
 
-if __name__ == "__main__":
-    pd.set_option("display.width", 200)
-    pd.set_option("display.max_columns", 50)
-    _out = main()
 
- # %%
+# ── 15.1 일간 운전 그래프: 실제 계산된 구간을 그대로 표시 ─────────────────────
+
+def _day_hours(times, date):
+    return np.asarray((pd.DatetimeIndex(times) - pd.Timestamp(date).normalize()).total_seconds()) / 3600.0
+
+
+def _segment_xy(trace, date, value, end_value=None):
+    x = np.column_stack((_day_hours(trace.start, date), _day_hours(trace.end, date))).ravel()
+    y0 = trace[value].to_numpy(dtype=float)
+    y1 = y0 if end_value is None else trace[end_value].to_numpy(dtype=float)
+    return x, np.column_stack((y0, y1)).ravel()
+
+
+def _daily_axis(ax, date, ylabel):
+    ax.set_xlim(0, 24)
+    ax.set_xticks(np.arange(0, 25, 3))
+    ax.set_xlabel(f"Time of day [h] — {pd.Timestamp(date).date()}")
+    ax.set_ylabel(ylabel)
+    ax.margins(x=0)
+    ax.grid(True, alpha=0.20)
+
+
+def _shade_off_intervals(ax, trace, date):
+    spans = []
+    for row in trace.loc[(trace.duration_h > 0) & ~trace.running].itertuples():
+        x0, x1 = _day_hours([row.start, row.end], date)
+        if spans and abs(x0 - spans[-1][1]) < 1e-8:
+            spans[-1][1] = x1
+        else:
+            spans.append([x0, x1])
+    for k, (x0, x1) in enumerate(spans):
+        ax.axvspan(x0, x1, alpha=0.10, linewidth=0,
+                   label="PEMWE OFF" if k == 0 else None)
+
+
+def _draw_events(ax, trace, date, energy=False):
+    for event, marker, label in (("START", "^", "Start / restart"), ("STOP", "v", "Stop")):
+        rows = trace.loc[trace.event == event]
+        if len(rows):
+            values = rows.E_start_kWh if energy else rows.j_Acm2
+            ax.scatter(_day_hours(rows.start, date), values, marker=marker,
+                       s=28, zorder=5, label=label)
+
+
+def plot_daily_current(case, trace, result, window, date, idx):
+    if plt is None:
+        raise ImportError("그래프 출력에는 matplotlib이 필요합니다.")
+    fig, ax = plt.subplots(figsize=DAILY_FIGSIZE)
+    if case == C1_NAME:
+        xa, ya = _segment_xy(trace, date, "PV_equivalent_j_Acm2")
+        ax.plot(xa, ya, ls="--", lw=1.5, alpha=0.85,
+                label="PV-equivalent j (capped at rated j)", zorder=3)
+    x, y = _segment_xy(trace, date, "j_Acm2")
+    ax.plot(x, y, color="black", ls="-", lw=2.1,
+        label="Actual operating j", zorder=4)
+    if case == C1_NAME:
+        ax.axhline(window.j_min, color="red", ls=":", lw=1.4,
+           label="Crossover limit")
+        low_load = trace.loc[(trace.P_in_kW > 0) & ~trace.running]
+        for k, row in enumerate(low_load.itertuples()):
+            xx = _day_hours([row.start, row.end], date)
+            ax.axvspan(xx[0], xx[1], alpha=0.12, linewidth=0,
+                       label="Generation below safety limit" if k == 0 else None)
+        note = "Dashed PV equivalent is diagnostic, not current actually supplied during OFF."
+    else:
+        ax.axhline(result.j_star, ls="--", lw=1.1, alpha=0.70,
+                   label=f"Fixed j*")
+        _shade_off_intervals(ax, trace, date)
+        _draw_events(ax, trace, date)
+        note = "Switch times use saved dispatch segments, including events within an input interval."
+    on_h = float(trace.loc[trace.running, "duration_h"].sum())
+    ax.set_title(f"{case} — operating current density")
+    top = max(window.j_max, float(result.j_star or 0), float(y.max(initial=0)))
+    ax.set_ylim(-0.04 * top, 1.15 * top)
+    _daily_axis(ax, date, "Current density [A/cm²]")
+    handles, labels = ax.get_legend_handles_labels()
+    if case == C1_NAME:
+        fig.legend(handles, labels, loc="lower center",
+                   bbox_to_anchor=(0.5, 0.065), ncol=2, fontsize=8)
+    else:
+        items = {
+            ("Fixed j*" if label.startswith("Fixed") else label): handle
+            for handle, label in zip(handles, labels)
+        }
+        rows = [
+            (["Actual operating j", "Fixed j*", "PEMWE OFF"], 0.115),
+            (["Start / restart", "Stop"], 0.065),
+        ]
+        for row_labels, y_pos in rows:
+            shown = [label for label in row_labels if label in items]
+            if shown:
+                fig.legend(
+                    [items[label] for label in shown],
+                    shown,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, y_pos),
+                    ncol=len(shown),
+                    fontsize=8,
+                    frameon=False,
+                )
+    fig.text(0.10, 0.025, note, fontsize=8)
+    fig.tight_layout(rect=(0, 0.20, 1, 1))
+    _finish(fig, f"G{idx:02d}_{case.replace(' ', '').lower()}_daily_current_{date}")
+
+
+def plot_daily_ess_energy(case, trace, result, date, idx):
+    if plt is None:
+        raise ImportError("그래프 출력에는 matplotlib이 필요합니다.")
+    fig, ax = plt.subplots(figsize=DAILY_FIGSIZE)
+    x, e = _segment_xy(trace, date, "E_start_kWh", "E_end_kWh")
+    ax.plot(x, e, color="black", ls="-", lw=2.0,
+        label="Stored energy", zorder=4)
+    _shade_off_intervals(ax, trace, date)
+    _draw_events(ax, trace, date, energy=True)
+    if result.E_rated > 0:
+        levels = [
+            ("E_lo", "Stop / floor") if case == C2_NAME
+            else ("E_stop", "Stop level"),
+            ("E_hi", "upper limit"),
+        ]
+
+        if case == C3_NAME:
+            levels.insert(1, ("E_restart", "ESS restart level"))
+
+        for key, label in levels:
+            level = float(result.meta[key])
+
+            if key == "E_restart":
+                ax.axhline(
+                    level, lw=1.0, ls="--", alpha=0.8,
+                    label=f"{label}: {level:,.1f} kWh ({level/result.E_rated:.0%})"
+                )
+            else:
+                ax.axhline(
+                    level, color="black", lw=1.0,
+                    ls=":" if key == "E_hi" else "--",
+                    label=label
+                )
+    ax.set_ylim(0, max(result.E_rated * 1.06, 1.0))
+    ax.set_title(f"{case} — ESS stored energy")
+    _daily_axis(ax, date, "ESS stored energy [kWh]")
+    fig.legend(*ax.get_legend_handles_labels(), loc="lower center",
+               bbox_to_anchor=(0.5, 0.065), ncol=3, fontsize=8)
+    note = ("Shading: PEMWE OFF.  Energy changes with net charging minus storage-side discharge.")
+    if case == C3_NAME:
+        note = "PV may restart PEMWE below the ESS restart level when direct_restart is enabled."
+    fig.text(0.10, 0.025, note, fontsize=8)
+    fig.tight_layout(rect=(0, 0.20, 1, 1))
+    _finish(fig, f"G{idx:02d}_{case.replace(' ', '').lower()}_daily_ESS_energy_{date}")
+
+
+def plot_daily_generation(profile, results, date, name=None):
+    ts = profile.timestamps
+    day = pd.Timestamp(date).normalize()
+    sel = (ts >= day) & (ts < day + pd.Timedelta(days=1))
+    selected_ts = ts[sel]
+    if not len(selected_ts) or not np.isclose(sel.sum() * profile.dt, 24.0):
+        raise DailyDateUnavailable(f"{date}: 완전한 일간 발전량이 없습니다.")
+    starts = _day_hours(selected_ts, date)
+    x = np.column_stack((starts, starts + profile.dt)).ravel()
+    fig, ax = plt.subplots(figsize=DAILY_FIGSIZE)
+    kind = _RE_KIND_EN.get(profile.meta.get("kind", ""), "Renewable")
+    PV_COLOR = "black"  # 원하는 색상명 또는 HEX 코드로 수정
+
+    generation_line, = ax.plot(
+        x, np.repeat(profile.P_in[sel], 2),
+        lw=2.0, label=f"Allocated {kind} input",
+    )
+    generation_line.set_color(PV_COLOR)
+    if not np.allclose(profile.P_in[sel], profile.P_gen[sel]):
+        ax.plot(x, np.repeat(profile.P_gen[sel], 2), ls=":", lw=1.3, label=f"Gross {kind} generation")
+    for case in (C2_NAME, C3_NAME):
+        if case in results:
+            ax.axhline(results[case].P_star, ls="--", lw=1.2,
+                       label=f"P* = {results[case].P_star:,.1f} kW")
+    ax.set_ylim(bottom=0)
+    ax.set_title(f"{kind} input and fixed PEMWE power setpoints")
+    _daily_axis(ax, date, "Power [kW]")
+    fig.legend(*ax.get_legend_handles_labels(), loc="lower center",
+               bbox_to_anchor=(0.5, 0.065), ncol=2, fontsize=8)
+    fig.tight_layout(rect=(0, 0.20, 1, 1))
+    _finish(fig, name or f"G26_daily_generation_and_Pstar_{date}")
+
+
+def make_daily_figures(out: dict, date: str | None = None, export_csv=True):
+    date = str(pd.Timestamp(DAILY_PLOT_DATE if date is None else date).date())
+    traces, results = out["operation_traces"], out["results"]
+    daily = {case: select_daily_trace(trace, date) for case, trace in traces.items()}
+    summary = print_operating_current_summary(traces, results, date)
+    for i, case in enumerate(_CASE_ORDER):
+        if case in daily:
+            plot_daily_current(case, daily[case], results[case], out["window"], date, 21 + i)
+    for idx, case in ((24, C2_NAME), (25, C3_NAME)):
+        if case in daily:
+            plot_daily_ess_energy(case, daily[case], results[case], date, idx)
+    if DAILY_INCLUDE_GENERATION:
+        plot_daily_generation(out["profile"], results, date)
+    saved = {}
+    if export_csv and _ensure_fig_dir() is not None:
+        saved = export_operation_traces(out, Path(_ensure_fig_dir()) / f"daily_data_{date}", date)
+    for case in (C2_NAME, C3_NAME):
+        if case in daily:
+            ev = daily[case].loc[daily[case].event != "", ["start", "event", "j_Acm2", "P_in_kW", "E_start_kWh"]]
+            print(f"\n[{case} {date} 기동·정지 시각 — {len(ev)}개 이벤트]")
+            print(ev.to_string(index=False, float_format=lambda v: f"{v:.4f}") if len(ev) else "  이 날짜에는 ON/OFF 전환이 없습니다.")
+    return {"date": date, "summary": summary, "traces": daily, "saved_csv": saved}
+
+
+def plot_saved_results(cache_path=None, *, date=None, daily_only=False,
+                       out=None, show=None) -> dict:
+    global _FIGURE_RUN_OVERRIDE, SHOW_FIGURES
+    if plt is None:
+        raise ImportError("matplotlib이 없습니다. 그래프 출력 환경에 설치하세요.")
+    out = load_result_cache(cache_path) if out is None else out
+    previous_directory, previous_show = _FIGURE_RUN_OVERRIDE, SHOW_FIGURES
+    run_name = Path(out["result_directory"]).name
+    _FIGURE_RUN_OVERRIDE = str(_resolve_path(FIG_DIR) / run_name) if FIG_DIR is not None else None
+    if show is not None:
+        SHOW_FIGURES = bool(show)
+    try:
+        setup_plots()
+        _FIGURE_MANIFEST.clear()
+        print(f"\n[PART 15] 저장 결과만 그립니다: {out['catalyst']['name']} / {out['profile'].region}")
+        print_operating_current_summary(out["operation_traces"], out["results"])
+        if not daily_only:
+            make_all_figures(out["profile"], out["results"], out["lcohs"], out["stack"],
+                             out["case1"], out["case2"], out["case3"], sweeps=out["j_sweeps"])
+        daily = None
+        try:
+            daily = make_daily_figures(out, date)
+        except DailyDateUnavailable as exc:
+            if daily_only:
+                raise
+            print(f"[일간 그래프 생략] {exc}")
+        directory = _ensure_fig_dir()
+        if directory:
+            pd.DataFrame(_FIGURE_MANIFEST).to_csv(Path(directory) / "figure_order.csv", index=False, encoding="utf-8-sig")
+        print(f"\n[그래프 저장 위치] {directory or '(저장하지 않음)'}")
+        return {"figure_directory": directory, "figure_manifest": list(_FIGURE_MANIFEST), "daily": daily}
+    finally:
+        _FIGURE_RUN_OVERRIDE, SHOW_FIGURES = previous_directory, previous_show
+
+
+
+# %% PART 15 — 실행: 저장된 결과로 그래프만 출력
+########################################################################################
+########################################################################################
+
+if __name__ == "__main__":
+    if not _is_command_line_execution():
+        _plots = plot_saved_results(date=DAILY_PLOT_DATE)
+    elif _cli_args.mode in ("plot", "all"):
+        _plots = plot_saved_results(cache_path=_cli_args.cache, date=_cli_args.date,
+                                   daily_only=_cli_args.daily_only,
+                                   show=False if _cli_args.no_show else None,
+                                   out=_out if _cli_args.mode == "all" else None)
+
+# %%

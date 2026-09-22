@@ -44,6 +44,11 @@ def build_payload(m, out: dict, region: str, kind: str) -> dict:
     results = out["results"]
     lcohs = out["lcohs"]
     stack = out["stack"]
+    # 2026-09-18: 0918 모델부터 촉매를 IrO2 하나가 아니라 여러 개(MnO2, NMO 계열)
+    # 중에서 고를 수 있게 됐다. out["catalyst"]는 그 실행에 실제로 쓰인 촉매의
+    # 스냅샷(dict) — 이름과 함께, 웹에서 "이 촉매를 쓰면 원가가 얼마나 바뀌는지"
+    # 보여줄 수 있게 원가 관련 값도 같이 넘긴다.
+    cat = out.get("catalyst") or {}
 
     p_nameplate_kw = float(stack.P_nameplate)
     # 전해조가 정격(j_rated)으로 100% 돌 때의 수소 생산 속도 [kg/h] — 사이트에서
@@ -119,4 +124,12 @@ def build_payload(m, out: dict, region: str, kind: str) -> dict:
         "cases": cases,
         "best_lcoh_case": best_lcoh[0],
         "best_h2_case": best_h2[0],
+        "catalyst": {
+            "name": cat.get("name", "IrO2"),
+            "anode_price_usd_g": round(float(cat.get("anode_price_usd_g", 0.0)), 4),
+            "an_load_mgcm2": cat.get("an_load_mgcm2"),
+            "slope_mV_dec": cat.get("slope_mV_dec"),
+            "j0_Acm2": cat.get("j0_Acm2"),
+            "NdMn_atomic": cat.get("NdMn_atomic"),
+        },
     }
