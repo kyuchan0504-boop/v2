@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-16T00:36:41.047118+00:00",
+  "generated_at": "2026-09-18T17:37:22.349644+00:00",
   "entries": [
     {
       "region": "강원",
@@ -7,11 +7,274 @@
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "경기",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "경남",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "경북",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "광주",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "대구",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "대전",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "부산",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "서울",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "세종",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "울산",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "인천",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "전북",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "제주",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "충남",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "충북",
+      "kind": "태양광",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "강원",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "경기",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "경남",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "경북",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-16T00:30:36.908256+00:00",
+      "elapsed_s": 74.8,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "울산",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2021,
+      "cached_at": "2026-09-16T00:31:19.649392+00:00",
+      "elapsed_s": 42.7,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "인천",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-16T00:32:13.623626+00:00",
+      "elapsed_s": 54.0,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "전남",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-16T00:33:36.050916+00:00",
+      "elapsed_s": 82.4,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "전북",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-16T00:34:37.123686+00:00",
+      "elapsed_s": 61.1,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-16T00:35:45.497664+00:00",
+      "elapsed_s": 68.4,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "충남",
+      "kind": "풍력",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-16T00:36:41.047073+00:00",
+      "elapsed_s": 55.5,
+      "catalyst": "IrO2"
+    },
+    {
+      "region": "충남",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
       "skipped_existing": true
     },
     {
       "region": "경기",
       "kind": "태양광",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "강원",
+      "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -20,6 +283,7 @@
     {
       "region": "경남",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -28,6 +292,7 @@
     {
       "region": "경북",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -36,6 +301,7 @@
     {
       "region": "광주",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -44,6 +310,7 @@
     {
       "region": "대구",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -52,6 +319,7 @@
     {
       "region": "대전",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -60,6 +328,7 @@
     {
       "region": "부산",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -68,6 +337,7 @@
     {
       "region": "서울",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -76,6 +346,7 @@
     {
       "region": "세종",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -84,6 +355,7 @@
     {
       "region": "울산",
       "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -92,14 +364,7 @@
     {
       "region": "인천",
       "kind": "태양광",
-      "start_year": 2018,
-      "end_year": 2025,
-      "cached_at": null,
-      "skipped_existing": true
-    },
-    {
-      "region": "전남",
-      "kind": "태양광",
+      "catalyst": "MnO2",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -108,6 +373,241 @@
     {
       "region": "전북",
       "kind": "태양광",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:01:46.627412+00:00",
+      "elapsed_s": 89.4
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:01:56.522912+00:00",
+      "elapsed_s": 99.3
+    },
+    {
+      "region": "제주",
+      "kind": "태양광",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:03:13.350835+00:00",
+      "elapsed_s": 86.7
+    },
+    {
+      "region": "충남",
+      "kind": "태양광",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:03:28.957131+00:00",
+      "elapsed_s": 92.4
+    },
+    {
+      "region": "강원",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:04:20.311662+00:00",
+      "elapsed_s": 51.3
+    },
+    {
+      "region": "충북",
+      "kind": "태양광",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:04:45.816563+00:00",
+      "elapsed_s": 92.5
+    },
+    {
+      "region": "경기",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:05:02.432124+00:00",
+      "elapsed_s": 42.1
+    },
+    {
+      "region": "경남",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:05:43.986476+00:00",
+      "elapsed_s": 58.2
+    },
+    {
+      "region": "경북",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:06:00.961140+00:00",
+      "elapsed_s": 58.5
+    },
+    {
+      "region": "울산",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2021,
+      "cached_at": "2026-09-18T16:06:16.161303+00:00",
+      "elapsed_s": 32.2
+    },
+    {
+      "region": "인천",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:06:41.659429+00:00",
+      "elapsed_s": 40.7
+    },
+    {
+      "region": "전남",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:07:19.583217+00:00",
+      "elapsed_s": 63.4
+    },
+    {
+      "region": "전북",
+      "kind": "풍력",
+      "catalyst": "MnO2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:07:28.696661+00:00",
+      "elapsed_s": 47.0
+    },
+    {
+      "region": "강원",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경기",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "광주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대구",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대전",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "부산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "서울",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "세종",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "울산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "인천",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -116,6 +616,250 @@
     {
       "region": "제주",
       "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:21:39.881895+00:00",
+      "elapsed_s": 90.6
+    },
+    {
+      "region": "충남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:21:46.155946+00:00",
+      "elapsed_s": 96.8
+    },
+    {
+      "region": "강원",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:22:39.052493+00:00",
+      "elapsed_s": 52.9
+    },
+    {
+      "region": "충북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:23:14.076651+00:00",
+      "elapsed_s": 94.2
+    },
+    {
+      "region": "경기",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:23:21.863383+00:00",
+      "elapsed_s": 42.8
+    },
+    {
+      "region": "경남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:24:12.466944+00:00",
+      "elapsed_s": 58.4
+    },
+    {
+      "region": "경북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:24:19.982421+00:00",
+      "elapsed_s": 58.1
+    },
+    {
+      "region": "울산",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2021,
+      "cached_at": "2026-09-18T16:24:45.423840+00:00",
+      "elapsed_s": 32.9
+    },
+    {
+      "region": "인천",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:25:02.937720+00:00",
+      "elapsed_s": 42.9
+    },
+    {
+      "region": "전남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:25:50.500805+00:00",
+      "elapsed_s": 65.1
+    },
+    {
+      "region": "전북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:25:51.653847+00:00",
+      "elapsed_s": 48.7
+    },
+    {
+      "region": "충남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:26:35.457714+00:00",
+      "elapsed_s": 43.8
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "catalyst": "NMO-0.05",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:26:43.540796+00:00",
+      "elapsed_s": 53.0
+    },
+    {
+      "region": "경기",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "강원",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "광주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대구",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대전",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "부산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "서울",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "세종",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "울산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "인천",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "제주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -124,14 +868,7 @@
     {
       "region": "충남",
       "kind": "태양광",
-      "start_year": 2018,
-      "end_year": 2025,
-      "cached_at": null,
-      "skipped_existing": true
-    },
-    {
-      "region": "충북",
-      "kind": "태양광",
+      "catalyst": "NMO-0.1",
       "start_year": 2018,
       "end_year": 2025,
       "cached_at": null,
@@ -140,14 +877,268 @@
     {
       "region": "강원",
       "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:40:51.450871+00:00",
+      "elapsed_s": 51.6
+    },
+    {
+      "region": "충북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T16:41:30.753648+00:00",
+      "elapsed_s": 90.9
+    },
+    {
+      "region": "경기",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:41:33.067585+00:00",
+      "elapsed_s": 41.6
+    },
+    {
+      "region": "경남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:42:28.192391+00:00",
+      "elapsed_s": 57.4
+    },
+    {
+      "region": "경북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:42:28.416087+00:00",
+      "elapsed_s": 55.3
+    },
+    {
+      "region": "울산",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2021,
+      "cached_at": "2026-09-18T16:43:00.810186+00:00",
+      "elapsed_s": 32.6
+    },
+    {
+      "region": "인천",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:43:09.258299+00:00",
+      "elapsed_s": 40.8
+    },
+    {
+      "region": "전북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:43:56.335556+00:00",
+      "elapsed_s": 47.1
+    },
+    {
+      "region": "전남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:44:03.686835+00:00",
+      "elapsed_s": 62.9
+    },
+    {
+      "region": "충남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:44:45.572356+00:00",
+      "elapsed_s": 41.9
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "catalyst": "NMO-0.1",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T16:44:46.130596+00:00",
+      "elapsed_s": 49.8
+    },
+    {
+      "region": "경기",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "강원",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "광주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대구",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대전",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "부산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "서울",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "세종",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "울산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "인천",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "제주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "충남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "강원",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
       "start_year": 2018,
       "end_year": 2022,
       "cached_at": null,
       "skipped_existing": true
     },
     {
+      "region": "충북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
       "region": "경기",
       "kind": "풍력",
+      "catalyst": "NMO-0.2",
       "start_year": 2018,
       "end_year": 2022,
       "cached_at": null,
@@ -156,6 +1147,250 @@
     {
       "region": "경남",
       "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "울산",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2021,
+      "cached_at": "2026-09-18T17:00:21.864479+00:00",
+      "elapsed_s": 31.5
+    },
+    {
+      "region": "경북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:00:47.592689+00:00",
+      "elapsed_s": 57.3
+    },
+    {
+      "region": "인천",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:01:03.048564+00:00",
+      "elapsed_s": 41.2
+    },
+    {
+      "region": "전남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:01:49.805029+00:00",
+      "elapsed_s": 62.2
+    },
+    {
+      "region": "전북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:01:49.880049+00:00",
+      "elapsed_s": 46.8
+    },
+    {
+      "region": "충남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:02:31.886056+00:00",
+      "elapsed_s": 42.0
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "catalyst": "NMO-0.2",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:02:40.848937+00:00",
+      "elapsed_s": 51.0
+    },
+    {
+      "region": "강원",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경기",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "광주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대구",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대전",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "부산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "서울",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "울산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "세종",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "인천",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "제주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "충남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "충북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경기",
+      "kind": "풍력",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "강원",
+      "kind": "풍력",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2022,
       "cached_at": null,
@@ -164,58 +1399,308 @@
     {
       "region": "경북",
       "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2022,
-      "cached_at": "2026-09-16T00:30:36.908256+00:00",
-      "elapsed_s": 74.8
+      "cached_at": null,
+      "skipped_existing": true
     },
     {
       "region": "울산",
       "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2021,
-      "cached_at": "2026-09-16T00:31:19.649392+00:00",
-      "elapsed_s": 42.7
+      "cached_at": null,
+      "skipped_existing": true
     },
     {
       "region": "인천",
       "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2022,
-      "cached_at": "2026-09-16T00:32:13.623626+00:00",
-      "elapsed_s": 54.0
-    },
-    {
-      "region": "전남",
-      "kind": "풍력",
-      "start_year": 2018,
-      "end_year": 2022,
-      "cached_at": "2026-09-16T00:33:36.050916+00:00",
-      "elapsed_s": 82.4
+      "cached_at": null,
+      "skipped_existing": true
     },
     {
       "region": "전북",
       "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2022,
-      "cached_at": "2026-09-16T00:34:37.123686+00:00",
-      "elapsed_s": 61.1
+      "cached_at": null,
+      "skipped_existing": true
     },
     {
-      "region": "제주",
+      "region": "전남",
       "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2022,
-      "cached_at": "2026-09-16T00:35:45.497664+00:00",
-      "elapsed_s": 68.4
+      "cached_at": null,
+      "skipped_existing": true
     },
     {
       "region": "충남",
       "kind": "풍력",
+      "catalyst": "NMO-0.3",
       "start_year": 2018,
       "end_year": 2022,
-      "cached_at": "2026-09-16T00:36:41.047073+00:00",
-      "elapsed_s": 55.5
+      "cached_at": "2026-09-18T17:20:23.259442+00:00",
+      "elapsed_s": 43.3
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "catalyst": "NMO-0.3",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:20:30.976436+00:00",
+      "elapsed_s": 51.0
+    },
+    {
+      "region": "강원",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경기",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "경북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "광주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대구",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "대전",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "부산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "서울",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "세종",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "울산",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "인천",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": null,
+      "skipped_existing": true
+    },
+    {
+      "region": "전북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T17:31:01.341374+00:00",
+      "elapsed_s": 86.8
+    },
+    {
+      "region": "전남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T17:31:05.363379+00:00",
+      "elapsed_s": 90.9
+    },
+    {
+      "region": "제주",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T17:32:31.041676+00:00",
+      "elapsed_s": 89.7
+    },
+    {
+      "region": "충남",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T17:32:35.188048+00:00",
+      "elapsed_s": 89.8
+    },
+    {
+      "region": "강원",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:33:23.479684+00:00",
+      "elapsed_s": 48.3
+    },
+    {
+      "region": "충북",
+      "kind": "태양광",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2025,
+      "cached_at": "2026-09-18T17:34:03.006124+00:00",
+      "elapsed_s": 91.9
+    },
+    {
+      "region": "경기",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:34:04.705148+00:00",
+      "elapsed_s": 41.2
+    },
+    {
+      "region": "경남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:34:59.967316+00:00",
+      "elapsed_s": 56.9
+    },
+    {
+      "region": "경북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:35:02.330633+00:00",
+      "elapsed_s": 57.6
+    },
+    {
+      "region": "울산",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2021,
+      "cached_at": "2026-09-18T17:35:31.707108+00:00",
+      "elapsed_s": 31.7
+    },
+    {
+      "region": "인천",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:35:43.248039+00:00",
+      "elapsed_s": 40.9
+    },
+    {
+      "region": "전북",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:36:29.813611+00:00",
+      "elapsed_s": 46.5
+    },
+    {
+      "region": "전남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:36:34.133629+00:00",
+      "elapsed_s": 62.4
+    },
+    {
+      "region": "충남",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:37:15.848063+00:00",
+      "elapsed_s": 41.7
+    },
+    {
+      "region": "제주",
+      "kind": "풍력",
+      "catalyst": "NMO-0.4",
+      "start_year": 2018,
+      "end_year": 2022,
+      "cached_at": "2026-09-18T17:37:22.349610+00:00",
+      "elapsed_s": 52.5
     }
   ],
   "failed": [],
