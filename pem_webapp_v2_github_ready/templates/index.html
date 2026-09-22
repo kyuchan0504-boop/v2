@@ -168,6 +168,7 @@
       <button data-kind="풍력">풍력</button>
     </div>
     <select id="regionSelect"></select>
+    <select id="catalystSelect"></select>
   </div>
   <div id="dataNote" class="wind-note hidden"></div>
   <button id="runBtn">확인 — 결과 보기</button>
@@ -370,12 +371,27 @@ const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","
 
 let regionsData = {{ regions | tojson }};
 let yearInfo = {{ year_info | tojson }};
+let catalystsData = {{ catalysts | tojson }};
 let currentKind = "태양광";
 let charts = {};
-let hasRun = false; // 한 번이라도 "확인"으로 결과를 본 뒤부터는, Case/지역을 바꾸면 자동으로 다시 불러온다
+let hasRun = false; // 한 번이라도 "확인"으로 결과를 본 뒤부터는, Case/지역/촉매를 바꾸면 자동으로 다시 불러온다
+
+// 2026-09-18: 촉매 선택 기능 추가. pem_model.py의 PARAM_TABLE 이름은 코드용이라
+// 그대로 보여주면 이해하기 어려우니, 드롭다운엔 사람이 읽기 편한 이름을 붙인다.
+const CATALYST_LABELS = {
+  "IrO2": "이리듐계 (IrO₂) · 기본",
+  "MnO2": "망간계 (MnO₂)",
+  "NMO-0.05": "Nd-Mn계 (Nd/Mn = 0.05)",
+  "NMO-0.1": "Nd-Mn계 (Nd/Mn = 0.1)",
+  "NMO-0.2": "Nd-Mn계 (Nd/Mn = 0.2)",
+  "NMO-0.3": "Nd-Mn계 (Nd/Mn = 0.3)",
+  "NMO-0.4": "Nd-Mn계 (Nd/Mn = 0.4)",
+};
+function catalystLabel(c){ return CATALYST_LABELS[c] || c; }
 
 const kindSeg = document.getElementById('kindSeg');
 const regionSelect = document.getElementById('regionSelect');
+const catalystSelect = document.getElementById('catalystSelect');
 const runBtn = document.getElementById('runBtn');
 const statusEl = document.getElementById('status');
 const spinner = document.getElementById('spinner');
@@ -407,6 +423,16 @@ function populateRegions(kind, preferredRegion){
   }
 }
 populateRegions(currentKind);
+
+function populateCatalysts(){
+  catalystSelect.innerHTML = '';
+  catalystsData.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = catalystLabel(c);
+    catalystSelect.appendChild(opt);
+  });
+}
+populateCatalysts();
 
 const windBtn = kindSeg.querySelector('button[data-kind="풍력"]');
 
@@ -455,6 +481,9 @@ regionSelect.addEventListener('change', () => {
   updateDataNote();
   if(hasRun) runModel();
 });
+catalystSelect.addEventListener('change', () => {
+  if(hasRun) runModel();
+});
 updateKindAvailability();
 updateDataNote();
 
@@ -487,16 +516,18 @@ function showError(msg){
 async function runModel(){
   const region = regionSelect.value;
   const kind = currentKind;
+  const catalyst = catalystSelect.value;
   if(!region) return;
 
   runBtn.disabled = true;
   resultsEl.classList.add('hidden');
   statusEl.classList.remove('hidden');
   spinner.classList.remove('hidden');
-  statusText.textContent = `${region} ${kind} 결과를 불러오는 중이에요...`;
+  statusText.textContent = `${region} ${kind} (${catalystLabel(catalyst)}) 결과를 불러오는 중이에요...`;
 
   try{
-    const url = `/api/run?region=${encodeURIComponent(region)}&kind=${encodeURIComponent(kind)}`;
+    const url = `/api/run?region=${encodeURIComponent(region)}&kind=${encodeURIComponent(kind)}`
+      + `&catalyst=${encodeURIComponent(catalyst)}`;
     const res = await fetch(url);
     const data = await res.json();
     if(!res.ok){ throw new Error(data.error || '요청 실패'); }
@@ -528,6 +559,7 @@ function render(d){
     ? `⚡ 추천 ESS 용량: ${bc.ess_kwh.toLocaleString()} kWh <small>(전해조 정격 대비 ${bc.ess_hours_of_stack.toLocaleString()}시간분)</small>`
     : `⚡ ESS 불필요 (재생에너지 직결 운전)`;
 
+  const cat = d.catalyst || {};
   const stats = [
     ["PEM 전해조 정격 용량", d.stack.p_nameplate_kw.toLocaleString() + " <small>kW</small>"],
     ["정격 수소 생산속도", d.stack.h2_rate_kg_h.toLocaleString() + " <small>kg/h</small>"],
@@ -535,6 +567,8 @@ function render(d){
     ["연간 발전량", d.e_paid_mwh.toLocaleString() + " <small>MWh</small>"],
     ["피크 / 평균 발전", d.peak_kw.toLocaleString() + " / " + d.mean_kw.toLocaleString() + " <small>kW</small>"],
     ["전해조 정격 전류밀도", d.stack.j_rated.toFixed(2) + " <small>A/cm²</small>"],
+    ["적용 촉매(양극)", catalystLabel(cat.name || 'IrO2')],
+    ["촉매 단가", (cat.anode_price_usd_g != null ? cat.anode_price_usd_g.toLocaleString() : '—') + " <small>$/g</small>"],
   ];
   document.getElementById('statGrid').innerHTML = stats.map(([k,v]) =>
     `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
