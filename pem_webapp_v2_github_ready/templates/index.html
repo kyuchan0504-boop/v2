@@ -357,7 +357,29 @@
     <div class="card">
       <h2>전력 사용 구조</h2>
       <p class="desc">받은 전력 중 실제 생산에 쓰인 비율 vs 버려진 비율(%)</p>
-      <div class="chart-wrap"><canvas id="chartLedger"></canvas></div>
+      <div class="donut-row">
+        <div class="donut-col">
+          <div class="donut-label" style="color:#2a78d6">Case 1</div>
+          <div class="chart-wrap donut"><canvas id="chartLedger1"></canvas></div>
+          <div class="donut-hrs" id="ledgerUsed1"></div>
+        </div>
+        <div class="donut-col">
+          <div class="donut-label" style="color:#eb6834">Case 2</div>
+          <div class="chart-wrap donut"><canvas id="chartLedger2"></canvas></div>
+          <div class="donut-hrs" id="ledgerUsed2"></div>
+        </div>
+        <div class="donut-col">
+          <div class="donut-label" style="color:#1baf7a">Case 3</div>
+          <div class="chart-wrap donut"><canvas id="chartLedger3"></canvas></div>
+          <div class="donut-hrs" id="ledgerUsed3"></div>
+        </div>
+      </div>
+      <div class="hour-legend">
+        <span><i class="dot" style="background:#1baf7a"></i>실제 사용</span>
+        <span><i class="dot" style="background:#e34948"></i>출력제한(낭비)</span>
+        <span><i class="dot" style="background:#eda100"></i>하한미만 정지(낭비)</span>
+        <span><i class="dot" style="background:#4a3aa7"></i>ESS 왕복손실(낭비)</span>
+      </div>
     </div>
   </div>
 </main>
@@ -646,23 +668,25 @@ function render(d){
     options: baseOpts({})
   });
 
-  // 6. 에너지 사용 구조 (stacked, %)
+  // 6. 전력 사용 구조 (도넛 3개, %)
   const ledgerKeys = [["used","실제 사용"],["curtail","출력제한(낭비)"],["idle","하한미만 정지(낭비)"],["rte","ESS 왕복손실(낭비)"]];
   const ledgerColors = {used:'#1baf7a', curtail:'#e34948', idle:'#eda100', rte:'#4a3aa7'};
-  charts.ledger = new Chart(document.getElementById('chartLedger'), {
-    type:'bar',
-    data:{
-      labels: CASE_ORDER,
-      datasets: ledgerKeys.map(([key,label]) => ({
-        label, data: CASE_ORDER.map(c => d.cases[c].ledger_pct[key]),
-        backgroundColor: ledgerColors[key], borderRadius:2, maxBarThickness:60,
-      }))
-    },
-    options: baseOpts({
-      indexAxis:'y',
-      scales:{ x:{stacked:true, beginAtZero:true, max:100, grid:{color:'#eeeceac0'}}, y:{stacked:true, grid:{display:false}} },
-      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{size:10}} } }
-    })
+  CASE_ORDER.forEach((c, i) => {
+    const lp = d.cases[c].ledger_pct;
+    const vals = ledgerKeys.map(([key]) => lp[key]);
+    charts['ledger' + (i+1)] = new Chart(document.getElementById('chartLedger' + (i+1)), {
+      type:'doughnut',
+      data:{ labels: ledgerKeys.map(([,label]) => label),
+             datasets:[{ data:vals, backgroundColor: ledgerKeys.map(([key]) => ledgerColors[key]), borderColor:'#fff', borderWidth:2 }] },
+      options:{
+        responsive:true, maintainAspectRatio:false, cutout:'55%',
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:(ctx) => `${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+        }
+      }
+    });
+    document.getElementById('ledgerUsed' + (i+1)).textContent = `실제 사용 ${lp.used.toFixed(1)}%`;
   });
 
   // 7. Case별 연간 운전시간대 (도넛 3개)
