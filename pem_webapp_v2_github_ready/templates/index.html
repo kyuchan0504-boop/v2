@@ -303,8 +303,8 @@
     <div class="stats" id="statGrid"></div>
 
     <div class="card">
-      <h2>PEM 전해조 용량 vs Case별 ESS 용량</h2>
-      <p class="desc">전해조 정격 출력을 기준으로 각 Case의 ESS가 얼마나 큰지 비교했어요 (<a href="#" id="infoLink2" style="color:var(--accent)">Case 설명 다시 보기</a>)</p>
+      <h2>Case별 spec.</h2>
+      <p class="desc">Case별 전해조 정격, ESS 용량, 평균 운전 전류밀도 (<a href="#" id="infoLink2" style="color:var(--accent)">Case 설명 다시 보기</a>)</p>
       <table class="cmp-table" id="cmpTable"></table>
     </div>
 
@@ -582,30 +582,37 @@ function render(d){
 
   const cat = d.catalyst || {};
   const stats = [
-    ["PEM 전해조 정격 용량", d.stack.p_nameplate_kw.toLocaleString() + " <small>kW</small>"],
     ["정격 수소 생산속도", d.stack.h2_rate_kg_h.toLocaleString() + " <small>kg/h</small>"],
     ["이용률 (CF)", d.capacity_factor_pct.toFixed(1) + "%"],
     ["연간 발전량", d.e_paid_mwh.toLocaleString() + " <small>MWh</small>"],
     ["피크 / 평균 발전", d.peak_kw.toLocaleString() + " / " + d.mean_kw.toLocaleString() + " <small>kW</small>"],
-    ["전해조 정격 전류밀도", d.stack.j_rated.toFixed(2) + " <small>A/cm²</small>"],
     ["적용 촉매(양극)", catalystLabel(cat.name || 'IrO2')],
     ["촉매 단가", (cat.anode_price_usd_g != null ? cat.anode_price_usd_g.toLocaleString() : '—') + " <small>$/g</small>"],
   ];
   document.getElementById('statGrid').innerHTML = stats.map(([k,v]) =>
     `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
 
-  // PEM 용량 vs Case별 ESS 용량 비교 표
+  // Case별 spec. 표 — 전해조 정격 / ESS 용량 / 평균 운전 전류밀도
+  // 평균 운전 전류밀도 = 수소를 생산한 시간 동안의 평균 j.
+  // 수소 생산속도가 j에 정비례(pem_model.h2_area, Faraday 효율 1)하므로
+  // (연간 생산량 ÷ 생산시간) ÷ 정격 생산속도 × 정격 전류밀도로 정확히 구해진다.
+  const meanJ = (cc) => {
+    if(cc.j_mean != null) return cc.j_mean;
+    if(!(cc.op_hours > 0) || !(d.stack.h2_rate_kg_h > 0)) return null;
+    return (cc.annual_h2_t * 1000 / cc.op_hours) / d.stack.h2_rate_kg_h * d.stack.j_rated;
+  };
   const cmpRows = CASE_ORDER.map(c => {
     const cc = d.cases[c];
+    const j = meanJ(cc);
     return `<tr>
       <td class="case-name" style="color:${CASE_COLORS[c]}">${c}</td>
       <td>${d.stack.p_nameplate_kw.toLocaleString()} kW</td>
       <td>${cc.ess_kwh > 0 ? cc.ess_kwh.toLocaleString() + ' kWh' : '—'}</td>
-      <td>${cc.ess_kwh > 0 ? cc.ess_hours_of_stack.toLocaleString() + '시간분' : '해당없음'}</td>
+      <td>${j != null ? j.toFixed(2) + ' A/cm²' : '—'}</td>
     </tr>`;
   }).join('');
   document.getElementById('cmpTable').innerHTML =
-    `<tr><th>Case</th><th>전해조 정격</th><th>ESS 용량</th><th>전해조 기준 환산</th></tr>${cmpRows}`;
+    `<tr><th>Case</th><th>전해조 정격</th><th>ESS 용량</th><th>평균 운전 전류밀도</th></tr>${cmpRows}`;
 
   // 1. 월별 발전량
   charts.gen = new Chart(document.getElementById('chartGen'), {
