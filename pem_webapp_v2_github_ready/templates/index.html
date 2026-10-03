@@ -327,18 +327,24 @@
     <div class="scroll-hint">▾ 아래로 내리면 자세한 데이터를 볼 수 있어요</div>
 
     <!-- 여기부터는 스크롤해서 보는 추가자료 -->
-    <div class="stats" id="statGrid"></div>
-
     <div class="card">
       <h2>Case별 SPEC</h2>
       <p class="desc">전해조 정격 · ESS 용량 · 평균 운전 전류밀도 (<a href="#" id="infoLink2" style="color:var(--accent)">Case 설명 다시 보기</a>)</p>
       <table class="cmp-table" id="cmpTable"></table>
     </div>
 
+    <div class="stats" id="statGrid"></div>
+
     <div class="card">
       <h2>월별 재생에너지 발전량</h2>
       <p class="desc">이 지역 태양광/풍력 발전소에서 이 전해조에 배정된 전력 · 월별 연평균 (MWh)</p>
       <div class="chart-wrap"><canvas id="chartGen"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>월별 수소 생산량 비교</h2>
+      <p class="desc">Case별 월간 수소 생산량 · 월별 연평균 (kg)</p>
+      <div class="chart-wrap"><canvas id="chartMonthlyH2"></canvas></div>
     </div>
 
     <div class="card">
@@ -366,12 +372,6 @@
         <span><i class="dot" style="background:#e9c46a"></i>발전 있으나 정지</span>
         <span><i class="dot" style="background:#adb5bd"></i>무발전 (야간 등)</span>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>월별 수소 생산량 비교</h2>
-      <p class="desc">Case별 월간 수소 생산량 · 월별 연평균 (kg)</p>
-      <div class="chart-wrap"><canvas id="chartMonthlyH2"></canvas></div>
     </div>
 
     <div class="card">
