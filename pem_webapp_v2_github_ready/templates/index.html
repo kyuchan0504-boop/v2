@@ -138,6 +138,17 @@
     display:inline-block; width:8px; height:8px; border-radius:50%;
     margin-right:4px; vertical-align:middle;
   }
+  .refs{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-top:4px;}
+  .refs summary{cursor:pointer; padding:13px 14px; font-size:14px; font-weight:700; list-style:none; display:flex; align-items:center; gap:6px;}
+  .refs summary::-webkit-details-marker{display:none;}
+  .refs summary::after{content:"▾"; margin-left:auto; color:var(--text-3); font-size:13px;}
+  .refs[open] summary::after{content:"▴";}
+  .refs-count{color:var(--text-3); font-weight:500; font-size:12px;}
+  .refs-body{padding:0 14px 12px; border-top:1px solid var(--border);}
+  .refs-body h3{font-size:12.5px; margin:12px 0 4px; color:var(--accent);}
+  .refs-body ol{margin:0; padding-left:26px;}
+  .refs-body li{font-size:12px; line-height:1.55; color:var(--text-2); margin-bottom:6px; overflow-wrap:anywhere;}
+  .refs-body li::marker{color:var(--text-3);}
   footer{text-align:center; color:var(--text-3); font-size:11px; padding:20px 16px 0;}
 
   .info-btn{
@@ -402,6 +413,41 @@
       </div>
     </div>
   </div>
+
+  <details class="refs" id="references">
+    <summary>References <span class="refs-count">(14)</span></summary>
+    <div class="refs-body">
+      <h3>Degradation</h3>
+      <ol start="1">
+        <li>Shin, Haeseong, et al. "Techno-economic evaluation of green hydrogen production with low-temperature water electrolysis technologies directly coupled with renewable power sources." <i>Energy Conversion and Management</i> 286 (2023): 117083.</li>
+        <li>Su, Zhengquan, et al. "Study of the durability of membrane electrode assemblies in various accelerated stress tests for proton-exchange membrane water electrolysis." <i>Materials</i> 17.6 (2024): 1331.</li>
+      </ol>
+      <h3>TEA</h3>
+      <ol start="3">
+        <li>Vives, Ana María Villarreal, et al. "Techno-economic analysis of large-scale green hydrogen production and storage." <i>Applied Energy</i> 346 (2023): 121333.</li>
+        <li>Jülch, Verena. "Comparison of electricity storage options using levelized cost of storage (LCOS) method." <i>Applied Energy</i> 183 (2016): 1594-1606.</li>
+        <li>De León, C. Martínez, et al. "Levelized Cost of Storage (LCOS) for a hydrogen system." <i>International Journal of Hydrogen Energy</i> 52 (2024): 1274-1284.</li>
+        <li>Proost, Joris. "State-of-the art CAPEX data for water electrolysers, and their impact on renewable hydrogen price settings." <i>International Journal of Hydrogen Energy</i> 44.9 (2019): 4406-4413.</li>
+        <li>Guerrero-Rodríguez, N. F., Ramírez-Rivera, F. A., &amp; Ramos Ciprian, R. D. (2026). Green Hydrogen for Critical-Load Restoration in High-Renewable Power Systems: Energy Not Served Reduction, Economic Value, and Carbon-Resilience Assessment. <i>Clean Technologies</i>, <i>8</i>(4), 102.</li>
+      </ol>
+      <h3>PEM modeling</h3>
+      <ol start="8">
+        <li>Lopez, VA Martinez, et al. "Dynamic operation of water electrolyzers: A review for applications in photovoltaic systems integration." <i>Renewable and Sustainable Energy Reviews</i> 182 (2023): 113407.</li>
+        <li>Abdin, Zainul, C. J. Webb, and E. MacA Gray. "Modelling and simulation of a proton exchange membrane (PEM) electrolyser cell." <i>International Journal of Hydrogen Energy</i> 40.39 (2015): 13243-13257.</li>
+        <li>Liso, Vincenzo, et al. "Modelling and experimental analysis of a polymer electrolyte membrane water electrolysis cell at different operating temperatures." <i>Energies</i> 11.12 (2018): 3273.</li>
+        <li>Marangio, Francesco, Massimo Santarelli, and Michele Calì. "Theoretical model and experimental analysis of a high pressure PEM water electrolyser for hydrogen production." <i>International Journal of Hydrogen Energy</i> 34.3 (2009): 1143-1158.</li>
+      </ol>
+      <h3>Catalyst</h3>
+      <ol start="12">
+        <li>Kim, Hyeongoo, et al. "Nd doping enables efficient and durable manganese-based water oxidation catalysts under acidic conditions." <i>Nature Communications</i> 17.1 (2026): 9499.</li>
+      </ol>
+      <h3>Crossover</h3>
+      <ol start="13">
+        <li>Trinke, Patrick, et al. "Elucidating the effect of mass transport resistances on hydrogen crossover and cell performance in PEM water electrolyzers by varying the cathode ionomer content." <i>Journal of The Electrochemical Society</i> 166.8 (2019): F465-F471.</li>
+        <li>Martin, Agate, et al. "Hydrogen crossover in PEM water electrolysis at current densities up to 10 A cm<sup>−2</sup>." <i>Journal of The Electrochemical Society</i> 169.9 (2022): 094507.</li>
+      </ol>
+    </div>
+  </details>
 </main>
 
 <footer>PEM 수전해 x 재생에너지 경제성 모델 · 사전계산 결과 뷰어</footer>
