@@ -96,6 +96,11 @@
   /* 폰: 결과가 나온 뒤에는 위쪽 영역을 선택 메뉴만 남기고 접어서,
      추천 결과와 두 그래프가 첫 화면에 다 들어오게 한다 */
   @media (max-width: 700px){
+    /* 두 그래프는 위아래로 쌓아 화면 폭을 다 쓴다 */
+    .dual-row{flex-direction:column; gap:12px;}
+    .card.half{padding:14px 12px 8px;}
+    .card.half h2{font-size:15px;}
+    .card.half p.desc{font-size:12.5px;}
     header.compact{padding:10px 14px 8px;}
     header.compact h1, header.compact .sub, header.compact #dataNote,
     header.compact #runBtn, header.compact #infoBtn{display:none !important;}
@@ -124,7 +129,8 @@
   .chart-wrap{position:relative; height:220px;}
   .chart-wrap.tall{height:260px;}
   .chart-wrap.small{height:160px;}
-  .chart-wrap.top{height:185px;}
+  .chart-wrap.top{height:300px;}
+  .chart-wrap.top.h2{height:230px;}
   .chart-wrap.donut{height:118px;}
   .donut-row{display:flex; gap:6px; margin-bottom:8px;}
   .donut-col{flex:1; min-width:0; text-align:center;}
@@ -323,17 +329,16 @@
     <!-- 2. Case별 LCOH / 생산량 — 좌우 비교 -->
     <div class="dual-row">
       <div class="card half">
-        <h2>Case별 생산단가</h2>
-        <p class="desc">LCOH ($/kg-H2) · 항목별</p>
+        <h2>Case별 생산단가 (LCOH)</h2>
+        <p class="desc">$/kg-H2 · 항목별 구성</p>
         <div class="chart-wrap top"><canvas id="chartLcoh"></canvas></div>
       </div>
       <div class="card half">
         <h2>Case별 생산량</h2>
         <p class="desc">연간 수소생산량 (t)</p>
-        <div class="chart-wrap top"><canvas id="chartH2"></canvas></div>
+        <div class="chart-wrap top h2"><canvas id="chartH2"></canvas></div>
       </div>
     </div>
-    <div class="lcoh-legend" id="lcohLegend"></div>
 
     <div class="scroll-hint">▾ 아래로 내리면 자세한 데이터를 볼 수 있어요</div>
 
@@ -700,7 +705,7 @@ function render(d){
       const metas = chart.getSortedVisibleDatasetMetas();
       if(!metas.length) return;
       ctx.save();
-      ctx.font = '700 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
+      ctx.font = '700 13px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
       ctx.fillStyle = '#0b0b0b'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       (opts.values || []).forEach((v, i) => {
         const tops = metas.map(m => m.data[i]).filter(Boolean);
@@ -717,9 +722,9 @@ function render(d){
   charts.h2 = new Chart(document.getElementById('chartH2'), {
     type:'bar',
     data:{ labels: CASE_ORDER, datasets:[{ label:'연간 수소생산량 (t)', data: h2Vals,
-      backgroundColor: CASE_ORDER.map(c => CASE_COLORS[c]), borderRadius:6, maxBarThickness:44 }]},
+      backgroundColor: CASE_ORDER.map(c => CASE_COLORS[c]), borderRadius:6, maxBarThickness:64 }]},
     options: baseOpts({ layout:{padding:{top:22}},
-      scales:{ x:{grid:{display:false}, ticks:{font:{size:11}}}, y:{grid:{color:'#eeeceac0'}, ticks:{font:{size:10}}, beginAtZero:true} },
+      scales:{ x:{grid:{display:false}, ticks:{font:{size:12}}}, y:{grid:{color:'#eeeceac0'}, ticks:{font:{size:11}}, beginAtZero:true} },
       plugins:{ legend:{display:false}, barLabels:{values:h2Vals, decimals:1} } }),
     plugins:[barLabels]
   });
@@ -744,22 +749,18 @@ function render(d){
         data: CASE_ORDER.map(c => d.cases[c].lcoh_items[key]),
         backgroundColor: ITEM_COLORS[key] || stackFallback[i % stackFallback.length],
         borderColor:'#fff', borderWidth:{top:1.5, right:0, bottom:0, left:0},
-        maxBarThickness:44,
+        maxBarThickness:64,
       }))
     },
     options: baseOpts({
       layout:{padding:{top:22}},
-      scales:{ x:{stacked:true, grid:{display:false}, ticks:{font:{size:11}}},
-               y:{stacked:true, beginAtZero:true, grid:{color:'#eeeceac0'}, ticks:{font:{size:10}}} },
-      plugins:{ legend:{ display:false },
+      scales:{ x:{stacked:true, grid:{display:false}, ticks:{font:{size:12}}},
+               y:{stacked:true, beginAtZero:true, grid:{color:'#eeeceac0'}, ticks:{font:{size:11}}} },
+      plugins:{ legend:{ position:'bottom', labels:{boxWidth:12, padding:10, font:{size:12}} },
                 barLabels:{values: CASE_ORDER.map(c => d.cases[c].lcoh), decimals:2} }
     }),
     plugins:[barLabels]
   });
-  // LCOH 항목 범례는 그래프 안이 아니라 두 그래프 아래에 화면 폭을 다 써서 보여준다
-  document.getElementById('lcohLegend').innerHTML = '<b>LCOH 항목</b>' + itemKeys.map((key, i) =>
-    `<span><i class="sw" style="background:${ITEM_COLORS[key] || stackFallback[i % stackFallback.length]}"></i>${key}</span>`).join('');
-
   // 5. 월별 H2 line
   charts.monthlyH2 = new Chart(document.getElementById('chartMonthlyH2'), {
     type:'line',
