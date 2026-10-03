@@ -303,8 +303,8 @@
     <div class="stats" id="statGrid"></div>
 
     <div class="card">
-      <h2>Case별 spec.</h2>
-      <p class="desc">Case별 전해조 정격, ESS 용량, 평균 운전 전류밀도 (<a href="#" id="infoLink2" style="color:var(--accent)">Case 설명 다시 보기</a>)</p>
+      <h2>Case별 SPEC</h2>
+      <p class="desc">전해조 정격 · ESS 용량 · 평균 운전 전류밀도 (<a href="#" id="infoLink2" style="color:var(--accent)">Case 설명 다시 보기</a>)</p>
       <table class="cmp-table" id="cmpTable"></table>
     </div>
 
@@ -592,7 +592,7 @@ function render(d){
   document.getElementById('statGrid').innerHTML = stats.map(([k,v]) =>
     `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
 
-  // Case별 spec. 표 — 전해조 정격 / ESS 용량 / 평균 운전 전류밀도
+  // Case별 SPEC 표 — 전해조 정격 / ESS 용량 / 평균 운전 전류밀도
   // 평균 운전 전류밀도 = 수소를 생산한 시간 동안의 평균 j.
   // 수소 생산속도가 j에 정비례(pem_model.h2_area, Faraday 효율 1)하므로
   // (연간 생산량 ÷ 생산시간) ÷ 정격 생산속도 × 정격 전류밀도로 정확히 구해진다.
