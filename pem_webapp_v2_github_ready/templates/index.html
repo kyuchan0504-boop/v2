@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>재생에너지 x 수전해 결과 뷰어</title>
+<title>재생에너지 연계 PEM 수전해의 지역별 운전 전략 최적화</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
@@ -23,7 +23,8 @@
     padding:20px 18px 14px; position:sticky; top:0; background:var(--bg);
     z-index:10; border-bottom:1px solid var(--border);
   }
-  h1{font-size:19px; margin:0 0 2px; letter-spacing:-.01em;}
+  h1{font-size:19px; margin:0 0 3px; letter-spacing:-.01em; line-height:1.35; word-break:keep-all;}
+  .team{margin:0 0 4px; font-size:12.5px; font-weight:700; color:var(--accent);}
   .sub{color:var(--text-2); font-size:13px; margin:0;}
   .controls{
     display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; align-items:center;
@@ -102,7 +103,7 @@
     .card.half h2{font-size:15px;}
     .card.half p.desc{font-size:12.5px;}
     header.compact{padding:10px 14px 8px;}
-    header.compact h1, header.compact .sub, header.compact #dataNote,
+    header.compact h1, header.compact .team, header.compact .sub, header.compact #dataNote,
     header.compact #runBtn, header.compact #infoBtn{display:none !important;}
     header.compact .controls{margin-top:0;}
     header.compact select{padding:8px 10px; font-size:14px;}
@@ -203,7 +204,8 @@
 <body>
 
 <header>
-  <h1>재생에너지 x PEM 수전해 결과 뷰어</h1>
+  <h1>재생에너지 연계 PEM 수전해의 지역별 운전 전략 최적화</h1>
+  <p class="team">울산대학교 수소정예 · 지역별 결과 뷰어</p>
   <p class="sub">지역과 에너지원을 고르고 확인을 누르면 미리 계산해둔 결과를 바로 보여드려요.</p>
   <div class="controls">
     <div class="seg" id="kindSeg">
@@ -235,7 +237,7 @@
       <div class="step">💧→H₂<br>수소 생산</div>
     </div>
 
-    <h3>Case 1 — 직결 (Direct coupling)</h3>
+    <h3>Case 1 — Direct coupling</h3>
     <div class="case-card" style="border-color:#2a78d6">
       <div class="name" style="color:#2a78d6">ESS 없음</div>
       <div class="case-diagram">
@@ -255,7 +257,7 @@
         시작하는 하한보다 적으면 그냥 정지하고, 정격보다 많이 남으면 그만큼 버립니다(출력제한).
         설비가 가장 단순하고 저렴하지만, 가동시간과 생산량이 날씨에 그대로 좌우됩니다.</p>
     </div>
-    <h3>Case 2 — ESS 완충, 고정 운전 (ESS-buffered)</h3>
+    <h3>Case 2 — ESS buffer</h3>
     <div class="case-card" style="border-color:#eb6834">
       <div class="name" style="color:#eb6834">ESS가 변동을 전부 흡수</div>
       <div class="case-diagram">
@@ -278,7 +280,7 @@
       <p>ESS가 발전량의 널뛰는 변동을 다 흡수해서, 전해조는 하루 종일 정해둔 일정한 출력(j*)으로만
         계속 돌립니다. 가동시간·생산량이 가장 안정적이지만, 그만큼 ESS를 크게(비싸게) 지어야 합니다.</p>
     </div>
-    <h3>Case 3 — 하이브리드 (직결 + ESS)</h3>
+    <h3>Case 3 — Hybrid response</h3>
     <div class="case-card" style="border-color:#1baf7a">
       <div class="name" style="color:#1baf7a">발전량 충분하면 직결, 부족할 때만 ESS</div>
       <div class="case-diagram">
@@ -299,7 +301,7 @@
           <text x="274" y="76" text-anchor="middle" font-size="9.5" fill="#0b0b0b">PEM 전해조</text>
         </svg>
       </div>
-      <p>발전량이 넉넉할 땐 Case 1처럼 직결로 쓰고, 모자랄 때만 ESS로 보충하는 하이브리드 방식입니다.
+      <p>발전량이 넉넉할 땐 Case 1처럼 직결로 쓰고, 모자랄 때만 ESS로 보충하는 Hybrid response 방식입니다.
         직결과 ESS를 함께 쓰기 때문에 Case 2보다 훨씬 작은 ESS로도 안정적인 운전을 만들 수 있습니다.</p>
     </div>
 
@@ -462,7 +464,7 @@
   </details>
 </main>
 
-<footer>PEM 수전해 x 재생에너지 경제성 모델 · 사전계산 결과 뷰어</footer>
+<footer>재생에너지 연계 PEM 수전해의 지역별 운전 전략 최적화 · 울산대학교 수소정예</footer>
 
 <script>
 const CASE_COLORS = {"Case 1":"#2a78d6", "Case 2":"#eb6834", "Case 3":"#1baf7a"};
@@ -659,7 +661,7 @@ function render(d){
     `· ${d.year_start}~${d.year_end}년(${d.n_years}개년) 실측 데이터 기준`;
   document.getElementById('heroEss').innerHTML = (bc.ess_kwh > 0)
     ? `⚡ 추천 ESS 용량: ${bc.ess_kwh.toLocaleString()} kWh <small>(전해조 정격 대비 ${bc.ess_hours_of_stack.toLocaleString()}시간분)</small>`
-    : `⚡ ESS 불필요 (재생에너지 직결 운전)`;
+    : `⚡ ESS 불필요 (Direct coupling)`;
 
   const cat = d.catalyst || {};
   const stats = [
