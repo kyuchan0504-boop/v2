@@ -140,7 +140,11 @@
   .trend-sub{font-size:11.5px; color:var(--text-3); margin:0 0 6px;}
   .trend-sub b{color:var(--text); margin-left:4px; white-space:nowrap;}
   .tr-p{font-size:13px; line-height:1.7; color:var(--text-2); margin:8px 0;}
-  @media (max-width:700px){ .trend-row{flex-direction:column; gap:4px;} .chart-wrap.trend{height:290px;} }
+  .tr-defs{display:grid; grid-template-columns:minmax(120px,150px) 1fr; gap:6px 14px; margin:10px 0 12px; padding:10px 12px;
+    font-size:12.5px; line-height:1.6; background:var(--bg); border:1px solid var(--border); border-radius:8px;}
+  .tr-defs dt{font-weight:700;} .tr-defs dd{margin:0; color:var(--text-2);}
+  @media (max-width:700px){ .trend-row{flex-direction:column; gap:4px;} .chart-wrap.trend{height:290px;}
+    .tr-defs{grid-template-columns:1fr; gap:1px;} .tr-defs dd{margin-bottom:7px;} .tr-defs dd:last-child{margin-bottom:0;} }
   .hour-legend{
     display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
     font-size:10.5px; color:var(--text-2); margin-top:2px;
@@ -429,6 +433,12 @@
       <h2>태양광: 잉여 비율로 Case를, 이용률로 ESS 크기를 정한다</h2>
       <p class="desc">태양광 17개 지역 · 2018~2025년 · IrO₂ 촉매 결과 기준 · 위에서 고른 지역은 크게 표시됩니다</p>
       <p class="tr-p">왼쪽은 Case 선택, 오른쪽은 Case 3로 갈 때의 ESS 크기입니다. 회색 띠(잉여 20~22%)는 두 방식 차이가 0.1 $/kg 안팎인 구간입니다.</p>
+      <dl class="tr-defs">
+        <dt>정격 초과 잉여 비율</dt>
+        <dd>전체 발전량 가운데 전해조 정격(1 MW)을 넘어서 생기는 전력의 비율입니다. ESS가 없는 Case 1에서는 이 전력을 쓰지 못하고 버립니다. 재생에너지 3 MW : 전해조 1 MW 기준이며, 낮 피크가 높고 뾰족할수록 커집니다.</dd>
+        <dt>평균 이용률</dt>
+        <dd>분석 기간의 평균 발전 출력 ÷ 발전설비 정격 용량입니다. 그 지역에서 발전이 얼마나 많이 되는지(발전량의 양)를 나타내며, 위 요약의 "이용률 (CF)"과 같은 값입니다.</dd>
+      </dl>
       <div class="hour-legend">
         <span><i class="dot" style="background:#2a78d6"></i>최저 LCOH: Case 1</span>
         <span><i class="dot" style="background:#1baf7a; border-radius:1px; transform:rotate(45deg)"></i>최저 LCOH: Case 3</span>
